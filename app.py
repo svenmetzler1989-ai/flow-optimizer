@@ -4,7 +4,56 @@ import requests
 import random
 
 # =====================================================================
-# 1. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS
+# 1. DESIGN OCH ANPASSAD BAKGRUNDSFÄRG (Specsavers Pro Theme)
+# =====================================================================
+st.set_page_config(page_title="Specsavers Core Control Room", layout="wide")
+
+st.markdown("""
+    <style>
+    /* Ändrar huvudbakgrunden till en mjuk, modern ljusgrå färg */
+    .stApp {
+        background-color: #f8fafc;
+    }
+    
+    /* GÖR ATT ALLA METRIC-KORT BLIR EXTREMT SNYGGA MED SKUGGA OCH VIT BAKGRUND */
+    [data-testid="stMetricBlock"] {
+        background-color: #ffffff !important;
+        border-radius: 12px !important;
+        padding: 20px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    
+    /* Snyggare runda expanders för medarbetarlistan */
+    .stExpander {
+        background-color: #ffffff !important;
+        border-radius: 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+        border: 1px solid #e2e8f0 !important;
+    }
+    
+    /* Gör tabellerna renare */
+    .stTable {
+        background-color: #ffffff !important;
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+    </style>
+""", unsafe_transform=True)
+
+st.title("👓 Specsavers Live Core Optimizer")
+st.caption("Avancerad flödesoptimering med automatisk lagerkedja och visuell målstyrning")
+st.markdown("---")
+
+# Fasta ursprungsvolymer för graferna
+START_PICK_STOCK = 4500
+START_PICK_NON = 800
+START_PACK = 400
+START_PUTAWAY_STOCK = 120
+START_PUTAWAY_NON = 20
+
+# =====================================================================
+# 2. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS
 # =====================================================================
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -24,25 +73,10 @@ def fetch_live_data():
             if "inbound_stock" in row: return row
     except: pass
     
-    # Perfekta ingångsvolymer för skiftet (Mål/Startvärden)
     return {
         "queue_pick_stock": 4500, "queue_pick_non_stock": 800, "queue_pack": 400,
         "inbound_stock": 6, "inbound_non_stock": 2, "putaway_stock": 120, "putaway_non_stock": 20
     }
-
-# =====================================================================
-# 2. HEMSIDANS GRUNDFORMAT
-# =====================================================================
-st.set_page_config(page_title="Specsavers Core Control Room", layout="wide")
-st.title("👓 Specsavers Live Core Optimizer")
-st.caption("Avancerad flödesoptimering med automatisk lagerkedja och visuell målstyrning")
-st.markdown("---")
-
-START_PICK_STOCK = 4500
-START_PICK_NON = 800
-START_PACK = 400
-START_PUTAWAY_STOCK = 120
-START_PUTAWAY_NON = 20
 
 # =====================================================================
 # 3. MEDARBETARDATABAS (30 Personer)
@@ -74,13 +108,12 @@ if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
 # =====================================================================
-# 4. SIDOPANEL: DEMOKONTROLLER OCH VEM SOM GÖR VAD
+# 4. SIDOPANEL: DEMOKONTROLLER OCH BEMANNINGSÖVERSIKT
 # =====================================================================
 st.sidebar.header("🕹️ Demo-kontroller")
 live_sim = st.sidebar.toggle("▶️ Starta Live-Simulering", value=False)
 live_sim_speed = st.sidebar.slider("Simuleringshastighet (Demo-tempo)", 10, 100, 40)
 
-# Räkna ut bemanning live utifrån placeringarna
 p_in_stock = list(st.session_state.placering.values()).count("Inbound Stock")
 p_in_non = list(st.session_state.placering.values()).count("Inbound Non-Stock")
 p_put_stock = list(st.session_state.placering.values()).count("Putaway Stock")
@@ -111,7 +144,11 @@ total_put_non_speed = sum(st.session_state.medarbetare_info[emp]["putaway_speed"
 total_in_stock_speed = p_in_stock * 1.71
 total_in_non_speed = p_in_non * 5.0
 
-# SPEED-Kapaciteter per person
+# Prestandamål för reglagen
+st.sidebar.markdown("---")
+st.sidebar.header("⚙️ Skiftets Tempo")
+speed_pick = st.sidebar.slider("Plockhastighet (Justera globalt snitt %)", 40, 150, 100)
+
 SPEED_INBOUND_STOCK = 1.71  
 SPEED_INBOUND_NON_STOCK = 5.0  
 SPEED_PUTAWAY_STOCK = 80         
@@ -122,7 +159,6 @@ SPEED_PACK = 110
 # 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA
 # =====================================================================
 if live_sim:
-    # Plock, pack och putaway betas av utifrån kapacitet
     plockat_stock = int(total_pick_stock_speed / live_sim_speed)
     plockat_non = int(total_pick_non_speed / live_sim_speed)
     packat = int(total_pack_speed / live_sim_speed)
@@ -134,17 +170,17 @@ if live_sim:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # LAGERKEDJA A: När en stockpall tas emot på inbound, blir den till 20 nya putaway-rader!
+    # LAGERKEDJA A: Inbound Stock blir till Putaway Stock-rader
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
         st.session_state.db_data["inbound_stock"] -= 1
-        st.session_state.db_data["putaway_stock"] += 20  # Omvandlas till inlagringsrader (plockas nästa dock)
+        st.session_state.db_data["putaway_stock"] += 20  
 
-    # LAGERKEDJA B: När Non-stock gods tas emot blir det direkt putaway rader...
+    # LAGERKEDJA B: Inbound Non-Stock blir till Putaway Non-Stock-rader
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
-    # LAGERKEDJA C: Non-stock putaway betas av OCH skapar direkt plockbara order SAMMA DAG!
+    # LAGERKEDJA C: Non-Stock putaway fyller på plocket samma dag
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
@@ -154,10 +190,8 @@ if live_sim:
 # 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
 # =====================================================================
 def visa_status_graf(titel, nuvarande, start_varde):
-    # Räkna ut procent avklarat arbete (1.0 = Helt klart/Målet nått)
     procent = min(1.0, max(0.0, 1.0 - (nuvarande / max(start_varde, 1))))
     
-    # Färgkodning enligt önskemål: Röd -> Guld -> Grön
     if procent == 1.0:
         farg = "🟢 Målet Nått!"
         farg_kod = "green"
@@ -171,7 +205,6 @@ def visa_status_graf(titel, nuvarande, start_varde):
     st.markdown(f"**{titel}** | Status: :{farg_kod}[{farg}] — {int(procent*100)}%")
     st.progress(procent)
 
-# HUVUDSKÄRMENS LAYOUT (Två kolumner för grafer)
 st.subheader("🎯 Visuell Måluppfyllnad (Real-Time KPI)")
 col_g1, col_g2 = st.columns(2)
 
@@ -282,3 +315,4 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(3)
     st.rerun()
+
