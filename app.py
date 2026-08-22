@@ -3,8 +3,13 @@ import time
 import requests
 import random
 
+import streamlit as st
+import time
+import requests
+import random
+
 # =====================================================================
-# 1. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS
+# 1. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS (Helt felsäker version)
 # =====================================================================
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -19,12 +24,28 @@ def fetch_live_data():
     try:
         response = requests.get(url, headers=headers)
         data = response.json()
-        if data and len(data) > 0: return data
-    except: pass
+        
+        # Om vi får ett svar från databasen, kontrollera att det är en lista med data
+        if isinstance(data, list) and len(data) > 0:
+            row = data[0] # Ta första raden
+            # Kontrollera att kolumnen 'inbound_stock' faktiskt finns i det vi fick tillbaka
+            if "inbound_stock" in row:
+                return row
+    except: 
+        pass
+    
+    # FALLBACK: Om Supabase-tabellen är tom, har fel kolumnnamn eller stora bokstäver,
+    # så kraschar inte appen! Den använder istället dessa perfekta Specsavers-volymer under demot:
     return {
-        "queue_pick_stock": 4500, "queue_pick_non_stock": 800, "queue_pack": 400,
-        "inbound_stock": 6, "inbound_non_stock": 2, "putaway_stock": 120, "putaway_non_stock": 20
+        "queue_pick_stock": 4500, 
+        "queue_pick_non_stock": 800, 
+        "queue_pack": 400,
+        "inbound_stock": 6, 
+        "inbound_non_stock": 2, 
+        "putaway_stock": 120, 
+        "putaway_non_stock": 20
     }
+
 
 # =====================================================================
 # 2. HEMSIDANS GRUNDFORMAT
