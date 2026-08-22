@@ -400,21 +400,32 @@ else:
     st.success("✅ **FLÖDET ÄR OPTIMALT BALANSERAT**")
 
 # =====================================================================
-# 11. PROCESS-PROGNOS (TABELLEN LÄNGST NER)
+# 11. PROCESS-PROGNOS (TABELLEN LÄNGST NER - TEXTJUSTERAD)
 # =====================================================================
 st.markdown("### 📊 Detaljerad tidsprognos för skiftet")
 prognos_data = {
-    "Processflöde": ["Inbound: Stock (35 min/pall)", "Inlagring: Putaway Stock (80 rader/h)", "Plock: Stock (100 order/h snitt)", "Packning (110 paket/h snitt)"],
-    "Aktuell Bemanning (Antal)": [p_in_stock, p_put_stock, p_pick_stock, p_pack],
+    "Processflöde": [
+        "Inbound: Stock (35 min/pall)", 
+        "Inbound: Non-Stock (35 min/pall)", 
+        "Inlagring: Putaway Stock (80 rader/h)", 
+        "Inlagring: Putaway Non-Stock (80 rader/h)", 
+        "Plock: Stock (100 order/h snitt)", 
+        "Packning (110 paket/h snitt)"
+    ],
+    "Aktuell Bemanning (Antal)": [p_in_stock, p_in_non, p_put_stock, p_put_non, p_pick_stock, p_pack],
     "Total Gruppkapacitet / timme": [
         f"{round(total_in_stock_speed, 1)} pallar", 
+        f"{round(total_in_non_speed, 1)} pallar", 
         f"{total_put_stock_speed} rader", 
+        f"{total_put_non_speed} rader", 
         f"{total_pick_stock_speed} order", 
         f"{total_pack_speed} paket"
     ],
     "Tid till tomt (Timmar)": [
         round(st.session_state.db_data['inbound_stock']/max(total_in_stock_speed,0.1), 1), 
+        round(st.session_state.db_data['inbound_non_stock']/max(total_in_non_speed,0.1), 1), 
         round(st.session_state.db_data['putaway_stock']/max(total_put_stock_speed,0.1), 1), 
+        round(st.session_state.db_data['putaway_non_stock']/max(total_put_non_speed,0.1), 1), 
         round(time_pick_stock, 1), 
         round(time_pack, 1)
     ]
@@ -424,3 +435,4 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(2)
     st.rerun()
+
