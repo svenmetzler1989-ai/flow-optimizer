@@ -45,13 +45,6 @@ st.title("👓 Specsavers Live Core Optimizer")
 st.caption("Avancerad flödesoptimering med automatisk lagerkedja och visuell målstyrning")
 st.markdown("---")
 
-# Fasta ursprungsvolymer för graferna
-START_PICK_STOCK = 4500
-START_PICK_NON = 800
-START_PACK = 400
-START_PUTAWAY_STOCK = 120
-START_PUTAWAY_NON = 20
-
 # =====================================================================
 # 2. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS
 # =====================================================================
@@ -77,6 +70,12 @@ def fetch_live_data():
         "queue_pick_stock": 4500, "queue_pick_non_stock": 800, "queue_pack": 400,
         "inbound_stock": 6, "inbound_non_stock": 2, "putaway_stock": 120, "putaway_non_stock": 20
     }
+
+START_PICK_STOCK = 4500
+START_PICK_NON = 800
+START_PACK = 400
+START_PUTAWAY_STOCK = 120
+START_PUTAWAY_NON = 20
 
 # =====================================================================
 # 3. MEDARBETARDATABAS (30 Personer)
@@ -108,7 +107,7 @@ if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
 # =====================================================================
-# 4. SIDOPANEL: DEMOKONTROLLER OCH BEMANNINGSÖVERSIKT
+# 4. SIDOPANEL: DEMOKONTROLLER OCH VEM SOM GÖR VAD
 # =====================================================================
 st.sidebar.header("🕹️ Demo-kontroller")
 live_sim = st.sidebar.toggle("▶️ Starta Live-Simulering", value=False)
@@ -144,21 +143,36 @@ total_put_non_speed = sum(st.session_state.medarbetare_info[emp]["putaway_speed"
 total_in_stock_speed = p_in_stock * 1.71
 total_in_non_speed = p_in_non * 5.0
 
-# Prestandamål för reglagen
-st.sidebar.markdown("---")
-st.sidebar.header("⚙️ Skiftets Tempo")
-speed_pick = st.sidebar.slider("Plockhastighet (Justera globalt snitt %)", 40, 150, 100)
+# Skapa minne för simulerad tid (Startar kl 06:00 = 360 minuter från midnatt)
+if 'sim_minutes' not in st.session_state:
+    st.session_state.sim_minutes = 360
 
-SPEED_INBOUND_STOCK = 1.71  
-SPEED_INBOUND_NON_STOCK = 5.0  
-SPEED_PUTAWAY_STOCK = 80         
-SPEED_PUTAWAY_NON_STOCK = 120    
-SPEED_PACK = 110  
+visnings_timme = st.session_state.sim_minutes // 60
+visnings_minut = st.session_state.sim_minutes % 60
+klocktid = f"{visnings_timme:02d}:{visnings_minut:02d}"
+
+if st.session_state.sim_minutes < 870:
+    aktivt_skift = "Formiddagsskift (06:00 - 14:30)"
+elif st.session_state.sim_minutes < 1380:
+    aktivt_skift = "Eftermiddagsskift (14:30 - 23:00)"
+else:
+    aktivt_skift = "Skift slut för dagen"
+    live_sim = False
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("⏰ Produktionsklocka")
+st.sidebar.info(f"**Aktuell Tid:** {klocktid}  \n**Skift:** {aktivt_skift}")
+
+if st.sidebar.button("🔄 Återställ klockan till 06:00"):
+    st.session_state.sim_minutes = 360
+    st.rerun()
 
 # =====================================================================
 # 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA
 # =====================================================================
-if live_sim:
+if live_sim and st.session_state.sim_minutes < 1380:
+    st.session_state.sim_minutes += 10
+    
     plockat_stock = int(total_pick_stock_speed / live_sim_speed)
     plockat_non = int(total_pick_non_speed / live_sim_speed)
     packat = int(total_pack_speed / live_sim_speed)
@@ -170,24 +184,21 @@ if live_sim:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # LAGERKEDJA A: Inbound Stock blir till Putaway Stock-rader
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
         st.session_state.db_data["inbound_stock"] -= 1
         st.session_state.db_data["putaway_stock"] += 20  
 
-    # LAGERKEDJA B: Inbound Non-Stock blir till Putaway Non-Stock-rader
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
-    # LAGERKEDJA C: Non-Stock putaway fyller på plocket samma dag
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
 
 # =====================================================================
-# 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER (Inklusive Non-Stock Putaway)
+# 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
 # =====================================================================
 def visa_status_graf(titel, nuvarande, start_varde):
     procent = min(1.0, max(0.0, 1.0 - (nuvarande / max(start_varde, 1))))
@@ -219,85 +230,51 @@ with col_g2:
 
 st.markdown("---")
 
+# =====================================================================
+# 8. REALTIDSTATUS (Siffrorna från Supabase)
+# =====================================================================
+st.subheader("📊 Aktuell IMI-Status (Köer just nu)")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Inbound STOCK (Pallar)", f"{st.session_state.db_data['inbound_stock']} st")
+col2.metric("Putaway STOCK (Rader)", f"{st.session_state.db_data['putaway_stock']} rader")
+col3.metric("Plockkö STOCK (Order)", f"{st.session_state.db_data['queue_pick_stock']} order")
+col4.metric("Väntar vid PACKSTATIONER", f"{st.session_state.db_data['queue_pack']} order")
+
+st.markdown("---")
 
 # =====================================================================
-# 8. BERÄKNA TOTAL KAPACITET OCH SKIFTSKLOCKA
+# 9. GÖMD MEDARBETARHANTERING (Expander & Uppslag med namn)
 # =====================================================================
-p_in_stock = list(st.session_state.placering.values()).count("Inbound Stock")
-p_in_non = list(st.session_state.placering.values()).count("Inbound Non-Stock")
-p_put_stock = list(st.session_state.placering.values()).count("Putaway Stock")
-p_put_non = list(st.session_state.placering.values()).count("Putaway Non-Stock")
-p_pick_stock = list(st.session_state.placering.values()).count("Plock Stock")
-p_pick_non = list(st.session_state.placering.values()).count("Plock Non-Stock")
-p_pack = list(st.session_state.placering.values()).count("Packning")
-
-total_pick_stock_speed = sum(st.session_state.medarbetare_info[emp]["pick_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Plock Stock")
-total_pick_non_speed = sum(st.session_state.medarbetare_info[emp]["pick_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Plock Non-Stock")
-total_pack_speed = sum(st.session_state.medarbetare_info[emp]["pack_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Packning")
-total_put_stock_speed = sum(st.session_state.medarbetare_info[emp]["putaway_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Putaway Stock")
-total_put_non_speed = sum(st.session_state.medarbetare_info[emp]["putaway_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Putaway Non-Stock")
-
-total_in_stock_speed = p_in_stock * 1.71
-total_in_non_speed = p_in_non * 5.0
-
-# Skapa minne för simulerad tid (Startar kl 06:00 = 360 minuter från midnatt)
-if 'sim_minutes' not in st.session_state:
-    st.session_state.sim_minutes = 360
-
-# Räkna ut timmar och minuter för display
-visnings_timme = st.session_state.sim_minutes // 60
-visnings_minut = st.session_state.sim_minutes % 60
-klocktid = f"{visnings_timme:02d}:{visnings_minut:02d}"
-
-# Bestäm aktivt skift baserat på klockan
-if st.session_state.sim_minutes < 870: # Före 14:30
-    aktivt_skift = "Formiddagsskift (06:00 - 14:30)"
-elif st.session_state.sim_minutes < 1380: # Före 23:00
-    aktivt_skift = "Eftermiddagsskift (14:30 - 23:00)"
-else:
-    aktivt_skift = "Skift slut för dagen"
-    live_sim = False  # Stoppa simuleringen automatiskt vid kl 23:00
-
-# Lägg till klockan och skiftinfo högst upp i sidopanelen
-st.sidebar.markdown("---")
-st.sidebar.subheader("⏰ Produktionsklocka")
-st.sidebar.info(f"**Aktuell Tid:** {klocktid}  \n**Skift:** {aktivt_skift}")
-
-# Återställningsknapp för klockan i sidopanelen
-if st.sidebar.button("🔄 Återställ klockan till 06:00"):
-    st.session_state.sim_minutes = 360
-    st.rerun()
-
-# =====================================================================
-# 9. SIMULERINGSLOGIK MED TIDSLINJE
-# =====================================================================
-if live_sim and st.session_state.sim_minutes < 1380:
-    # Ticka fram tiden med 10 minuter per steg
-    st.session_state.sim_minutes += 10
+with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka för att öppna)", expanded=False):
+    ROLLER = ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Stock", "Plock Non-Stock", "Packning"]
+    emp_list = list(st.session_state.medarbetare_info.keys())
+    c_emp1, c_emp2, c_emp3 = st.columns(3)
     
-    plockat_stock = int(total_pick_stock_speed / live_sim_speed)
-    plockat_non = int(total_pick_non_speed / live_sim_speed)
-    packat = int(total_pack_speed / live_sim_speed)
-    inlagrat_stock = int(total_put_stock_speed / live_sim_speed)
-    inlagrat_non = int(total_put_non_speed / live_sim_speed)
+    with c_emp1:
+        for emp_id in emp_list[:10]:
+            info = st.session_state.medarbetare_info[emp_id]
+            st.session_state.placering[emp_id] = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
+    with c_emp2:
+        for emp_id in emp_list[10:20]:
+            info = st.session_state.medarbetare_info[emp_id]
+            st.session_state.placering[emp_id] = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
+    with c_emp3:
+        for emp_id in emp_list[20:30]:
+            info = st.session_state.medarbetare_info[emp_id]
+            st.session_state.placering[emp_id] = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
 
-    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
-    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (plockat_stock + plockat_non) - packat)
-    st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
-    st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
-
-    if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
-        st.session_state.db_data["inbound_stock"] -= 1
-        st.session_state.db_data["putaway_stock"] += 20  
-
-    if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
-        st.session_state.db_data["inbound_non_stock"] -= 1
-        st.session_state.db_data["putaway_non_stock"] += 10
-
-    if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
-        st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
-    else:
-        st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
+    st.markdown("### 🔍 Slå upp specifik medarbetare live")
+    namn_val_lista = [f"{st.session_state.medarbetare_info[eid]['namn']} ({eid})" for eid in emp_list]
+    valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska effektivitet:", namn_val_lista)
+    
+    # Extrahera ID korrekt
+    valt_id = valt_namn_med_id.split("(")[1].replace(")", "")
+    valda_info = st.session_state.medarbetare_info[valt_id]
+    valda_zon = st.session_state.placering[valt_id]
+    
+    col_e1, col_e2 = st.columns(2)
+    col_e1.write(f"**Medarbetare:** {valda_info['namn']} | **Zon:** {valda_zon}")
+    col_e2.write(f"**Klockad kapacitet:** {valda_info['pick_speed']} order/h plock | {valda_info['pack_speed']} paket/h pack")
 
 # =====================================================================
 # 10. TIDSKALKYLER OCH DIAGNOSMOTOR
@@ -354,5 +331,4 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(2)
     st.rerun()
-
 
