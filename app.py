@@ -187,7 +187,7 @@ if live_sim:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
 
 # =====================================================================
-# 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
+# 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER (Inklusive Non-Stock Putaway)
 # =====================================================================
 def visa_status_graf(titel, nuvarande, start_varde):
     procent = min(1.0, max(0.0, 1.0 - (nuvarande / max(start_varde, 1))))
@@ -211,12 +211,14 @@ col_g1, col_g2 = st.columns(2)
 with col_g1:
     visa_status_graf("🛒 Kunduppdrag: Plock STOCK", st.session_state.db_data["queue_pick_stock"], START_PICK_STOCK)
     visa_status_graf("⚡ Kunduppdrag: Plock NON-STOCK", st.session_state.db_data["queue_pick_non_stock"], START_PICK_NON)
+    visa_status_graf("⚡ Inlagring: Putaway NON-STOCK", st.session_state.db_data["putaway_non_stock"], START_PUTAWAY_NON)
 
 with col_g2:
     visa_status_graf("🏁 Slutsteg: Packning (Försegling)", st.session_state.db_data["queue_pack"], START_PACK)
     visa_status_graf("📥 Inlagring: Putaway STOCK", st.session_state.db_data["putaway_stock"], START_PUTAWAY_STOCK)
 
 st.markdown("---")
+
 
 # =====================================================================
 # 8. REALTIDSTATUS (Siffrorna från Supabase)
