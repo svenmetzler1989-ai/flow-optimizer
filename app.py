@@ -253,7 +253,7 @@ def flytta_en_person(fran_zon, till_zon):
         if lokation == fran_zon:
             st.session_state.placering[emp] = till_zon
             st.toast(f"🏃 {st.session_state.medarbetare_info[emp]['namn']} omstyrd till {till_zon}!", icon="✅")
-            st.st.rerun()
+            st.rerun()
             break
 
 # Visar statusmeddelande om automatisk krishantering är igång
