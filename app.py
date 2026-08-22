@@ -322,47 +322,61 @@ col_n4.empty()
 st.markdown("---")
 
 # =====================================================================
-# 9. GÖMD MEDARBETARHANTERING (Expander & Uppslag med namn)
+# 9. UPPDATERAD MEDARBETARHANTERING (Grupperad efter Arbetsuppdrag)
 # =====================================================================
-with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka för att öppna)", expanded=False):
+with st.expander("🔍 Hantera och ställ om de 30 medarbetarna per uppdrag (Klicka för att öppna)", expanded=False):
     ROLLER = ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Stock", "Plock Non-Stock", "Packning"]
     emp_list = list(st.session_state.medarbetare_info.keys())
-    c_emp1, c_emp2, c_emp3 = st.columns(3)
     
-    with c_emp1:
-        for emp_id in emp_list[:10]:
-            info = st.session_state.medarbetare_info[emp_id]
-            valt = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
-            if valt == "Inbound Stock" and p_in_stock >= 2 and st.session_state.placering[emp_id] != "Inbound Stock":
-                st.error("Max 2 på Inbound Stock!")
-            elif valt == "Inbound Non-Stock" and p_in_non >= 1 and st.session_state.placering[emp_id] != "Inbound Non-Stock":
-                st.error("Max 1 på Inbound Non-Stock!")
+    st.markdown("### 👥 Fördela resurser per arbetsstation")
+    
+    # Skapa 7 kolumner på bredden – en för varje unikt uppdrag på lagret
+    zon_cols = st.columns(7)
+    
+    # Lista ut vilka som tillhör vilken zon just nu innan vi ritar ut kontrollerna
+    zon_medlemmar = {zon: [] for zon in ROLLER}
+    for emp_id in emp_list:
+        nuvarande_zon = st.session_state.placering[emp_id]
+        zon_medlemmar[nuvarande_zon].append(emp_id)
+        
+    # Skapa kontrollerna i respektive kolumn
+    for i, zon_namn in enumerate(ROLLER):
+        with zon_cols[i]:
+            st.markdown(f"**{zon_namn}**")
+            st.caption(f"Antal: {len(zon_medlemmar[zon_namn])} pers")
+            
+            # Om det finns personal på stationen, rita ut en flytt-meny för var och en
+            if zon_medlemmar[zon_namn]:
+                for emp_id in zon_medlemmar[zon_namn]:
+                    info = st.session_state.medarbetare_info[emp_id]
+                    
+                    # Unik rullista för den här specifika medarbetaren i den här kolumnen
+                    valt = st.selectbox(
+                        f"👤 {info['namn']}", 
+                        ROLLER, 
+                        index=ROLLER.index(zon_namn), 
+                        key=f"grp_sel_{emp_id}"
+                    )
+                    
+                    # Om chefen ändrar uppdraget i rullistan, kolla bemanningsreglerna live!
+                    if valt != zon_namn:
+                        if valt == "Inbound Stock" and p_in_stock >= 2:
+                            st.error("Stopp! Max 2 på Inbound Stock.")
+                        elif valt == "Inbound Non-Stock" and p_in_non >= 1:
+                            st.error("Stopp! Max 1 på Inbound Non-Stock.")
+                        elif valt == "Packning" and p_pack >= 11:
+                            st.error("Stopp! Max 11 på Packning.")
+                        else:
+                            # Spara den nya placeringen och ladda omedelbart om sidan för att uppdatera alla beräkningar
+                            st.session_state.placering[emp_id] = valt
+                            st.rerun()
             else:
-                st.session_state.placering[emp_id] = valt
-    with c_emp2:
-        for emp_id in emp_list[10:20]:
-            info = st.session_state.medarbetare_info[emp_id]
-            valt = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
-            if valt == "Inbound Stock" and p_in_stock >= 2 and st.session_state.placering[emp_id] != "Inbound Stock":
-                st.error("Max 2 på Inbound Stock!")
-            elif valt == "Inbound Non-Stock" and p_in_non >= 1 and st.session_state.placering[emp_id] != "Inbound Non-Stock":
-                st.error("Max 1 på Inbound Non-Stock!")
-            else:
-                st.session_state.placering[emp_id] = valt
-    with c_emp3:
-        for emp_id in emp_list[20:30]:
-            info = st.session_state.medarbetare_info[emp_id]
-            valt = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
-            if valt == "Inbound Stock" and p_in_stock >= 2 and st.session_state.placering[emp_id] != "Inbound Stock":
-                st.error("Max 2 på Inbound Stock!")
-            elif valt == "Inbound Non-Stock" and p_in_non >= 1 and st.session_state.placering[emp_id] != "Inbound Non-Stock":
-                st.error("Max 1 på Inbound Non-Stock!")
-            else:
-                st.session_state.placering[emp_id] = valt
+                st.info("Tom station")
 
-    st.markdown("### 🔍 Slå upp specifik medarbetare live")
+    st.markdown("---")
+    st.markdown("### 🔍 Snabbsök medarbetare")
     namn_val_lista = [f"{st.session_state.medarbetare_info[eid]['namn']} ({eid})" for eid in emp_list]
-    valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska effektivitet:", namn_val_lista)
+    valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska kapacitet:", namn_val_lista)
     
     valt_id = "EMP-101"
     for eid in emp_list:
@@ -374,7 +388,7 @@ with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka fö
     valda_zon = st.session_state.placering[valt_id]
     
     col_e1, col_e2 = st.columns(2)
-    col_e1.write(f"**Medarbetare:** {valda_info['namn']} | **Zon:** {valda_zon}")
+    col_e1.write(f"**Medarbetare:** {valda_info['namn']} | **Nuvarande uppdrag:** {valda_zon}")
     col_e2.write(f"**Klockad kapacitet:** {valda_info['pick_speed']} order/h plock | {valda_info['pack_speed']} paket/h pack")
 
 # =====================================================================
