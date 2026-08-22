@@ -78,7 +78,7 @@ START_PUTAWAY_STOCK = 120
 START_PUTAWAY_NON = 20
 
 # =====================================================================
-# 3. MEDARBETARDATABAS (30 Personer)
+# 3. MEDARBETARDATABAS (Låst till 15 personer per aktivt skift)
 # =====================================================================
 if 'medarbetare_info' not in st.session_state:
     medarbetare_info = {
@@ -88,8 +88,9 @@ if 'medarbetare_info' not in st.session_state:
         "EMP-104": {"namn": "Elin", "pick_speed": 105, "pack_speed": 100, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
         "EMP-105": {"namn": "Mikael", "pick_speed": 95, "pack_speed": 105, "putaway_speed": 70, "start_zon": "Inbound Stock"},
     }
-    start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Inbound Stock", "Putaway Stock", "Plock Non-Stock"]
-    for i in range(106, 131):
+    # Skapa resterande 10 medarbetare för att nå exakt 15 personer på golvet
+    start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Putaway Stock", "Plock Non-Stock"]
+    for i in range(106, 116):
         emp_id = f"EMP-{i}"
         medarbetare_info[emp_id] = {
             "namn": f"Medarbetare {i}",
@@ -105,6 +106,7 @@ if 'placering' not in st.session_state:
 
 if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
+
 
 # =====================================================================
 # 4. SIDOPANEL: DEMOKONTROLLER OCH BEMANNINGSÖVERSIKT
