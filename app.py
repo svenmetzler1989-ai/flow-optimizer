@@ -84,62 +84,63 @@ total_staff = p_in_stock + p_in_non + p_put_stock + p_put_non + p_pick_stock + p
 st.sidebar.info(f"Totalt fördelad personal: {total_staff} av 30 personer")
 
 # =====================================================================
-# 4. FASTSTÄLLDA EFFEKTIVITETSMÅL (Era exakta siffror!)
+# 4. FASTSTÄLLDA EFFEKTIVITETSMÅL (Uppdaterade mått)
 # =====================================================================
 st.sidebar.markdown("---")
 st.sidebar.header("⏱️ Fabriksinställda Prestandamål")
 
-# Inbound & Inlagring (35 min per stockpall = ca 1.71 pallar/timme)
-SPEED_INBOUND_STOCK = 1.71  
-SPEED_INBOUND_NON_STOCK = 5.0  
-SPEED_PUTAWAY_STOCK = 40
-SPEED_PUTAWAY_NON_STOCK = 90  
+# Inbound & Inlagring
+SPEED_INBOUND_STOCK = 1.71       # 35 min per stockpall = ca 1.71 pallar/timme
+SPEED_INBOUND_NON_STOCK = 5.0    # Non-stock går mycket snabbare
+SPEED_PUTAWAY_STOCK = 80         # NYTT MÅL: 80 rader i timmen per person!
+SPEED_PUTAWAY_NON_STOCK = 120    # Non-stock putaway går supersnabbt
 
-# Grundhastigheten startar på 100 order i timmen per person
+# Plock & Pack
 speed_pick = st.sidebar.slider("Plockhastighet (Order/h per person)", 40, 150, 100)
-
-# Packhastighet: 110 paket i timmen per person
-SPEED_PACK = 110  
+SPEED_PACK = 110                 # Packhastighet: 110 paket i timmen per person
 
 # =====================================================================
-# 5. DATAHANTERING OCH SIMULERING (Uppdaterad för att visa personalens effekt)
+# 5. DATAHANTERING OCH SIMULERING (Fasta order från igår - tickar NEDÅT)
 # =====================================================================
 if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
 if live_sim:
-    # 1. Hur mycket nytt arbete kommer in på lagret just nu?
-    NYA_STOCK_ORDER = random.randint(40, 80)
-    NYA_NON_STOCK_ORDER = random.randint(10, 30)
+    # Eftersom order är från igår kommer inga nya order in under skiftet.
+    # Vi räknar ut hur mycket din personal betar av per simulerat tidsteg (delat med 100 för synlighet)
+    plockat_stock = int((p_pick_stock * speed_pick) / 100)
+    plockat_non = int((p_pick_non * speed_pick) / 100)
+    packat = int((p_pack * SPEED_PACK) / 100)
     
-    # 2. Hur mycket hinner din personal plocka bort (baserat på 100 order/h per person)?
-    # Vi delar med 300 för att anpassa hastigheten så det syns snyggt i demot
-    personalen_plockar_stock = int((p_pick_stock * speed_pick) / 300)
-    personalen_plockar_non = int((p_pick_non * speed_pick) / 300)
-    
-    # 3. Uppdatera plockköerna live (Inkommande minus Personalens arbete)
-    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] + NYA_STOCK_ORDER - personalen_plockar_stock)
-    st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] + NYA_NON_STOCK_ORDER - personalen_plockar_non)
-    
-    # 4. Packflödet (Det som plockas skickas till packkön, minus vad packarna hinner försegla med 110/h)
-    personalen_packar = int((p_pack * SPEED_PACK) / 300)
-    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (personalen_plockar_stock + personalen_plockar_non) - personalen_packar)
-    
-    # 5. Inbound (Pallar betas av baserat på 35 min/pall när det finns personal där)
-    if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0:
-        if random.random() > 0.4:  # 60% chans att en pall försvinner per tick om det finns folk
-            st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - 1)
+    inlagrat_stock = int((p_put_stock * SPEED_PUTAWAY_STOCK) / 100)
+    inlagrat_non = int((p_put_non * SPEED_PUTAWAY_NON_STOCK) / 100)
 
+    # Köerna minskar (går neråt) baserat på personalens arbete!
+    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
+    st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
+    
+    # Det som plockas fyller på packkön, och det som packas dras ifrån packkön!
+    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (plockat_stock + plockat_non) - packat)
+    
+    # Inlagringsköerna minskar också live på skärmen
+    st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
+    st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
+    
+    # Inbound-pallar betas av (en och en med 30% chans per tick om det finns personal)
+    if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
+        st.session_state.db_data["inbound_stock"] -= 1
+    if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
+        st.session_state.db_data["inbound_non_stock"] -= 1
 
 # =====================================================================
 # 6. VISA AKTUELLT LÄGE PÅ SKÄRMEN
 # =====================================================================
-st.subheader("📊 Aktuell IMI-Status (Baserat på era volymer)")
+st.subheader("📊 Aktuell IMI-Status (Baserat på gårdagens orderbörda)")
 st.markdown("#### 📥 Varumottagning & Inlagring")
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Inbound STOCK (Pallar)", f"{st.session_state.db_data['inbound_stock']} st", help="Mål: 35 minuter per pall")
 col2.metric("Inbound NON-STOCK (Gods)", f"{st.session_state.db_data['inbound_non_stock']} st")
-col3.metric("Putaway STOCK (Rader)", f"{st.session_state.db_data['putaway_stock']} rader")
+col3.metric("Putaway STOCK (Rader)", f"{st.session_state.db_data['putaway_stock']} rader", help="Mål: 80 rader i timmen")
 col4.metric("Putaway NON-STOCK (Rader)", f"{st.session_state.db_data['putaway_non_stock']} rader")
 
 st.markdown("#### 🛒 Produktion")
@@ -148,6 +149,19 @@ col5.metric("Plockkö STOCK", f"{st.session_state.db_data['queue_pick_stock']} o
 col6.metric("Plockkö NON-STOCK", f"{st.session_state.db_data['queue_pick_non_stock']} order")
 col7.metric("Väntar vid PACKSTATIONER", f"{st.session_state.db_data['queue_pack']} order", help="Mål: 110 paket per timme/person")
 st.markdown("---")
+
+# =====================================================================
+# 6.5 EXAKTA TIDSKALKYLER (Används av AI-hjärnan under)
+# =====================================================================
+time_in_stock = st.session_state.db_data['inbound_stock'] / max(p_in_stock * SPEED_INBOUND_STOCK, 0.1)
+time_in_non = st.session_state.db_data['inbound_non_stock'] / max(p_in_non * SPEED_INBOUND_NON_STOCK, 0.1)
+time_put_stock = st.session_state.db_data['putaway_stock'] / max(p_put_stock * SPEED_PUTAWAY_STOCK, 0.1)
+time_put_non = st.session_state.db_data['putaway_non_stock'] / max(p_put_non * SPEED_PUTAWAY_NON_STOCK, 0.1)
+
+time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(p_pick_stock * speed_pick, 0.1)
+time_pick_non = st.session_state.db_data['queue_pick_non_stock'] / max(p_pick_non * speed_pick, 0.1)
+time_pack = st.session_state.db_data['queue_pack'] / max(p_pack * SPEED_PACK, 0.1)
+
 
 # =====================================================================
 # 7. EXAKTA TIDSKALKYLER (AI-HJÄRNAN)
