@@ -62,7 +62,7 @@ def fetch_live_data():
         response = requests.get(url, headers=headers)
         data = response.json()
         if isinstance(data, list) and len(data) > 0:
-            row = data
+            row = data[0] if isinstance(data, list) else data
             if "inbound_stock" in row: return row
     except: pass
     
@@ -88,7 +88,7 @@ if 'medarbetare_info' not in st.session_state:
         "EMP-104": {"namn": "Elin", "pick_speed": 105, "pack_speed": 100, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
         "EMP-105": {"namn": "Mikael", "pick_speed": 95, "pack_speed": 105, "putaway_speed": 70, "start_zon": "Inbound Stock"},
     }
-    start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Putaway Stock", "Plock Non-Stock"]
+    start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Inbound Stock", "Putaway Stock", "Plock Non-Stock"]
     for i in range(106, 131):
         emp_id = f"EMP-{i}"
         medarbetare_info[emp_id] = {
@@ -107,7 +107,7 @@ if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
 # =====================================================================
-# 4. SIDOPANEL: DEMOKONTROLLER OCH VEM SOM GÖR VAD
+# 4. SIDOPANEL: DEMOKONTROLLER OCH BEMANNINGSÖVERSIKT
 # =====================================================================
 st.sidebar.header("🕹️ Demo-kontroller")
 live_sim = st.sidebar.toggle("▶️ Starta Live-Simulering", value=False)
@@ -123,16 +123,16 @@ p_pack = list(st.session_state.placering.values()).count("Packning")
 
 st.sidebar.markdown("---")
 st.sidebar.header("👥 Bemanningsöversikt (Vem gör vad)")
-st.sidebar.markdown(f"📥 **Inbound Stock:** `{p_in_stock}/2 pers`  \n(Mål: 35 min / pall)")
-st.sidebar.markdown(f"📥 **Inbound Non-Stock:** `{p_in_non}/1 pers`")
+st.sidebar.markdown(f"📥 **Inbound Stock:** `{p_in_stock} pers` (Max 2)")
+st.sidebar.markdown(f"📥 **Inbound Non-Stock:** `{p_in_non} pers` (Max 1)")
 st.sidebar.markdown(f"🧱 **Putaway Stock:** `{p_put_stock} pers`  \n(Mål: 80 rader/h)")
 st.sidebar.markdown(f"🧱 **Putaway Non-Stock:** `{p_put_non} pers`")
 st.sidebar.markdown(f"🛒 **Plock Stock:** `{p_pick_stock} pers`  \n(Mål: 100 order/h)")
 st.sidebar.markdown(f"⚡ **Plock Non-Stock:** `{p_pick_non} pers`")
-st.sidebar.markdown(f"📦 **Packning:** `{p_pack}/11 pers`  \n(Mål: 110 paket/h)")
+st.sidebar.markdown(f"📦 **Packning:** `{p_pack} pers` (Max 11)  \n(Mål: 110 paket/h)")
 
 # =====================================================================
-# 5. KAPACITETSBERÄKNINGAR UTIFRÅN INSTÄMPPLINGARNA
+# 5. KAPACITETSBERÄKNINGAR OCH SKIFTSKLOCKA
 # =====================================================================
 total_pick_stock_speed = sum(st.session_state.medarbetare_info[emp]["pick_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Plock Stock")
 total_pick_non_speed = sum(st.session_state.medarbetare_info[emp]["pick_speed"] for emp in st.session_state.medarbetare_info if st.session_state.placering[emp] == "Plock Non-Stock")
@@ -167,7 +167,7 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING (BUGGFIXAD)
+# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
@@ -175,7 +175,6 @@ if live_sim and st.session_state.sim_minutes < 1380:
     # ⚙️ BUGGFIX: Räkna bara ut plockat antal om det faktiskt finns något kvar i plockköerna!
     if st.session_state.db_data["queue_pick_stock"] > 0:
         plockat_stock = int(total_pick_stock_speed / live_sim_speed)
-        # Se till att vi inte plockar mer än vad som faktiskt finns kvar i kön
         plockat_stock = min(plockat_stock, st.session_state.db_data["queue_pick_stock"])
     else:
         plockat_stock = 0
@@ -201,7 +200,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
     if st.session_state.sim_minutes <= 885:
         if random.random() > 0.95:
             st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
-            st.toast("🚚 Ny leverans! Fler pallar han landat på Inbound Stock.", icon="🚚")
+            st.toast("🚚 Ny leverans! Fler pallar har landat på Inbound Stock.", icon="🚚")
     elif st.session_state.sim_minutes == 890:
         st.toast("🛑 Klockan är efter 14:45. Inleveransen är stängd för dagen!", icon="🔒")
 
@@ -223,7 +222,6 @@ if live_sim and st.session_state.sim_minutes < 1380:
         omplacerade = 0
         for emp, lokation in st.session_state.placering.items():
             nuvarande_packare = list(st.session_state.placering.values()).count("Packning")
-            
             if nuvarande_packare < 11:
                 if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
                     st.session_state.placering[emp] = "Packning"
@@ -232,23 +230,30 @@ if live_sim and st.session_state.sim_minutes < 1380:
                 if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
                     st.session_state.placering[emp] = "Putaway Stock"
                     omplacerade += 1
-                    
         if omplacerade > 0:
-            st.toast(f"⚡ Flödesräddning aktiverad: Maximerar packningen till 11 stationer!", icon="🛡️")
+            st.toast("⚡ Flödesräddning aktiverad: Maximerar packningen till 11 stationer!", icon="🛡️")
 
-    # Lagerkedja för Non-Stock plock
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
 
-# HÄR LÄGGER VI IN MANUELLA AI-KNAPPAR SOM SÄKERHETSVENTIL
+# =====================================================================
+# 6B. AI FLÖDESASSISTENT (BESLUTSSTÖD MED KNAPPAR)
+# =====================================================================
 st.markdown("### 🚦 AI Flödesassistent (Beslutsstöd)")
 
 def flytta_en_person(fran_zon, till_zon):
     if till_zon == "Packning" and p_pack >= 11:
         st.error("⚠️ **KAPACITETSSTOPP:** Max 11 packbord tillgängliga per skift!")
         return
+    if till_zon == "Inbound Stock" and p_in_stock >= 2:
+        st.error("⚠️ **KAPACITETSSTOPP:** Max 2 personer vid Inbound Stock!")
+        return
+    if till_zon == "Inbound Non-Stock" and p_in_non >= 1:
+        st.error("⚠️ **KAPACITETSSTOPP:** Max 1 person vid Inbound Non-Stock!")
+        return
+        
     for emp, lokation in st.session_state.placering.items():
         if lokation == fran_zon:
             st.session_state.placering[emp] = till_zon
@@ -256,7 +261,6 @@ def flytta_en_person(fran_zon, till_zon):
             st.rerun()
             break
 
-# Visar statusmeddelande om automatisk krishantering är igång
 if st.session_state.db_data["queue_pack"] > 0 and p_pack == 11:
     st.info("🛡️ **AI-STATUS:** Packstationerna körs i maximal kapacitet (11/11 bord bemannade). Överskottspersonal styrs till inlagring.")
 elif st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
@@ -265,7 +269,6 @@ elif st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
         flytta_en_person("Inbound Stock", "Putaway Stock")
 
 st.markdown("---")
-
 
 # =====================================================================
 # 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
@@ -301,7 +304,7 @@ with col_g2:
 st.markdown("---")
 
 # =====================================================================
-# 8. REALTIDSTATUS (Inklusive alla Non-Stock-volymer)
+# 8. REALTIDSTATUS (Siffrorna från Supabase)
 # =====================================================================
 st.subheader("📊 Aktuell IMI-Status (Köer just nu)")
 col1, col2, col3, col4 = st.columns(4)
@@ -323,8 +326,6 @@ st.markdown("---")
 # =====================================================================
 with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka för att öppna)", expanded=False):
     ROLLER = ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Stock", "Plock Non-Stock", "Packning"]
-    
-    # Valideringskontroll direkt i rullisterna för att hindra användaren från att manuellt övermanna
     emp_list = list(st.session_state.medarbetare_info.keys())
     c_emp1, c_emp2, c_emp3 = st.columns(3)
     
@@ -363,7 +364,6 @@ with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka fö
     namn_val_lista = [f"{st.session_state.medarbetare_info[eid]['namn']} ({eid})" for eid in emp_list]
     valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska effektivitet:", namn_val_lista)
     
-    # Extrahera ut det riktiga ID-numret på ett säkert sätt ur strängen
     valt_id = "EMP-101"
     for eid in emp_list:
         if f"({eid})" in valt_namn_med_id:
@@ -391,13 +391,11 @@ if time_pack > time_pick_stock and st.session_state.db_data['queue_pack'] > 600:
     if p_pack < 11:
         if st.button("🏃 Verkställ: Flytta 1 person till Packning", key="btn_pack"):
             flytta_en_person("Plock Stock", "Packning")
-            st.rerun()
 elif time_pick_stock > 3.5:
     st.warning("⚠️ **FLASKHALS DETEKTERAD: PLOCKKÖN SLÄPAR**")
     st.info("💡 **Rekommendation:** Öka antalet plockare.")
     if st.button("🏃 Verkställ: Flytta 1 person till Plock Stock", key="btn_pick"):
         flytta_en_person("Inbound Stock", "Plock Stock")
-        st.rerun()
 else:
     st.success("✅ **FLÖDET ÄR OPTIMALT BALANSERAT**")
 
@@ -426,4 +424,3 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(2)
     st.rerun()
-
