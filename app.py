@@ -167,7 +167,7 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AI-BESLUTSSTÖD (Specsavers-regler)
+# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
@@ -183,7 +183,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # 🚚 REGEL: Simulerat inflöde sker ENDAST fram till kl 14:45 (885 minuter från midnatt)
+    # 🚚 REGEL: Simulerat inflöde sker ENDAST fram till kl 14:45
     if st.session_state.sim_minutes <= 885:
         if random.random() > 0.95:
             st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
@@ -201,61 +201,60 @@ if live_sim and st.session_state.sim_minutes < 1380:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
+    # 🚨 AUTOMATISK KRISHANTERING (Garanterar 11 packare & 4 inlagrare när köer töms)
+    plock_klart = (st.session_state.db_data["queue_pick_stock"] == 0 and st.session_state.db_data["queue_pick_non_stock"] == 0)
+    inbound_klart = (st.session_state.db_data["inbound_stock"] == 0 and st.session_state.db_data["inbound_non_stock"] == 0)
+
+    if (plock_klart or inbound_klart) and st.session_state.db_data["queue_pack"] > 0:
+        omplacerade = 0
+        # Gå igenom alla medarbetare och fyll på packborden till exakt 11
+        for emp, lokation in st.session_state.placering.items():
+            nuvarande_packare = list(st.session_state.placering.values()).count("Packning")
+            
+            if nuvarande_packare < 11:
+                # Ta personal från zoner som är klara
+                if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
+                    st.session_state.placering[emp] = "Packning"
+                    omplacerade += 1
+            else:
+                # Om vi redan har 11 packare, skicka resten (de sista 4) till Putaway så de inte står stilla
+                if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
+                    st.session_state.placering[emp] = "Putaway Stock"
+                    omplacerade += 1
+                    
+        if omplacerade > 0:
+            st.toast(f"⚡ Flödesräddning aktiverad: Maximerar packningen till 11 stationer!", icon="🛡️")
+
     # Lagerkedja för Non-Stock plock
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
 
-# HÄR LÄGGER VI IN DINA NYA AI-VARNINGSTRIANGLAR OCH GODKÄNNANDE-KNAPPAR
+# HÄR LÄGGER VI IN MANUELLA AI-KNAPPAR SOM SÄKERHETSVENTIL
 st.markdown("### 🚦 AI Flödesassistent (Beslutsstöd)")
 
-# Hjälpfunktion för att manuellt styra om första lediga medarbetare via knapp
 def flytta_en_person(fran_zon, till_zon):
-    # 🛑 BEMANNINGSREGLER: Hårda spärrar för stationernas maxkapacitet
     if till_zon == "Packning" and p_pack >= 11:
         st.error("⚠️ **KAPACITETSSTOPP:** Max 11 packbord tillgängliga per skift!")
         return
-    if till_zon == "Inbound Stock" and p_in_stock >= 2:
-        st.error("⚠️ **KAPACITETSSTOPP:** Det får ALDRIG vara mer än 2 personer vid Inbound Stock!")
-        return
-    if till_zon == "Inbound Non-Stock" and p_in_non >= 1:
-        st.error("⚠️ **KAPACITETSSTOPP:** Det får MAX vara 1 person vid Inbound Non-Stock!")
-        return
-        
     for emp, lokation in st.session_state.placering.items():
         if lokation == fran_zon:
             st.session_state.placering[emp] = till_zon
             st.toast(f"🏃 {st.session_state.medarbetare_info[emp]['namn']} omstyrd till {till_zon}!", icon="✅")
-            st.rerun()
+            st.st.rerun()
             break
 
-# SCENARIO 1: Inbound Stock är helt klart, men personal står kvar där
-if st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
+# Visar statusmeddelande om automatisk krishantering är igång
+if st.session_state.db_data["queue_pack"] > 0 and p_pack == 11:
+    st.info("🛡️ **AI-STATUS:** Packstationerna körs i maximal kapacitet (11/11 bord bemannade). Överskottspersonal styrs till inlagring.")
+elif st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
     st.warning("⚠️ **FLÖDESVARNING: INBOUND STOCK ÄR KLART!**")
-    st.markdown(f"Det finns inga pallar kvar på Inbound, men **{p_in_stock} medarbetare** står kvar på zonen.")
     if st.button("🏃 Verkställ: Flytta 1 ledig medarbetare till Putaway Stock", key="ai_move_in_to_put"):
         flytta_en_person("Inbound Stock", "Putaway Stock")
 
-# SCENARIO 2: Plock Stock är helt klart, men personal plockar fortfarande luft
-if st.session_state.db_data["queue_pick_stock"] == 0 and p_pick_stock > 0:
-    st.warning("⚠️ **FLÖDESVARNING: PLOCK STOCK ÄR TOMT!**")
-    if p_pack < 11:
-        st.markdown(f"Målet för Plock Stock är nått! Flytta dina **{p_pick_stock} plockare** till packstationerna.")
-        if st.button("🏃 Verkställ: Flytta 1 ledig plockare till Packning", key="ai_move_pick_to_pack"):
-            flytta_en_person("Plock Stock", "Packning")
-    else:
-        st.error("⚠️ **PACKSTATIONEN FULL:** Plocket är klart, men du har redan max 11 packbord igång. Fördela resurserna till inlagring!")
-
-# SCENARIO 3: Det har kommit in nya pallar på Inbound, men ingen jobbar där
-if st.session_state.db_data["inbound_stock"] > 0 and p_in_stock == 0:
-    st.info("💡 **FLÖDESREKOMMENDATION: NYTT GODS PÅ INBOUND**")
-    st.markdown(f"Det ligger **{st.session_state.db_data['inbound_stock']} pallar** på Inbound Stock. Stationen är tom.")
-    if p_in_stock < 2:  # Kontrollera att vi inte bryter mot regeln vid flyttförsök
-        if st.button("🏃 Verkställ: Flytta 1 medarbetare till Inbound Stock", key="ai_move_pack_to_in"):
-            flytta_en_person("Packning", "Inbound Stock")
-
 st.markdown("---")
+
 
 # =====================================================================
 # 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
