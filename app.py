@@ -231,7 +231,7 @@ col4.metric("Väntar vid PACKSTATIONER", f"{st.session_state.db_data['queue_pack
 st.markdown("---")
 
 # =====================================================================
-# 9. GÖMD MEDARBETARHANTERING (Expander & Uppslag)
+# 9. GÖMD MEDARBETARHANTERING (Expander & Uppslag med namn)
 # =====================================================================
 with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka för att öppna)", expanded=False):
     ROLLER = ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Stock", "Plock Non-Stock", "Packning"]
@@ -251,14 +251,21 @@ with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka fö
             info = st.session_state.medarbetare_info[emp_id]
             st.session_state.placering[emp_id] = st.selectbox(f"👤 {info['namn']} ({emp_id})", ROLLER, index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}")
 
-    st.markdown("### 🔍 Slå upp specifik personalkod live")
-    valda_emp = st.selectbox("Välj en medarbetare för att granska effektivitet:", emp_list)
+    st.markdown("### 🔍 Slå upp specifik medarbetare live")
+    
+    # Skapa en snygg lista där namnet står först istället för koden
+    namn_val_lista = [f"{st.session_state.medarbetare_info[eid]['namn']} ({eid})" for eid in emp_list]
+    valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska effektivitet:", namn_val_lista)
+    
+    # Hitta tillbaka till rätt EMP-id baserat på valet i rullistan
+    valda_emp = [eid for eid in emp_list if st.session_state.medarbetare_info[eid]['namn'] in valt_namn_med_id][0]
     valda_info = st.session_state.medarbetare_info[valda_emp]
     valda_zon = st.session_state.placering[valda_emp]
     
     col_e1, col_e2 = st.columns(2)
     col_e1.write(f"**Medarbetare:** {valda_info['namn']} | **Zon:** {valda_zon}")
     col_e2.write(f"**Klockad kapacitet:** {valda_info['pick_speed']} order/h plock | {valda_info['pack_speed']} paket/h pack")
+
 
 # =====================================================================
 # 10. TIDSKALKYLER OCH DIAGNOSMOTOR
@@ -315,4 +322,5 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(3)
     st.rerun()
+
 
