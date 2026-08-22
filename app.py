@@ -167,17 +167,31 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING
+# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING (BUGGFIXAD)
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
     
-    plockat_stock = int(total_pick_stock_speed / live_sim_speed)
-    plockat_non = int(total_pick_non_speed / live_sim_speed)
+    # ⚙️ BUGGFIX: Räkna bara ut plockat antal om det faktiskt finns något kvar i plockköerna!
+    if st.session_state.db_data["queue_pick_stock"] > 0:
+        plockat_stock = int(total_pick_stock_speed / live_sim_speed)
+        # Se till att vi inte plockar mer än vad som faktiskt finns kvar i kön
+        plockat_stock = min(plockat_stock, st.session_state.db_data["queue_pick_stock"])
+    else:
+        plockat_stock = 0
+
+    if st.session_state.db_data["queue_pick_non_stock"] > 0:
+        plockat_non = int(total_pick_non_speed / live_sim_speed)
+        plockat_non = min(plockat_non, st.session_state.db_data["queue_pick_non_stock"])
+    else:
+        plockat_non = 0
+
+    # Packning och inlagring rullar på baserat på kapacitet
     packat = int(total_pack_speed / live_sim_speed)
     inlagrat_stock = int(total_put_stock_speed / live_sim_speed)
     inlagrat_non = int(total_put_non_speed / live_sim_speed)
 
+    # Uppdatera databasvärdena för köerna live
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (plockat_stock + plockat_non) - packat)
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
@@ -187,7 +201,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
     if st.session_state.sim_minutes <= 885:
         if random.random() > 0.95:
             st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
-            st.toast("🚚 Ny leverans! Fler pallar har landat på Inbound Stock.", icon="🚚")
+            st.toast("🚚 Ny leverans! Fler pallar han landat på Inbound Stock.", icon="🚚")
     elif st.session_state.sim_minutes == 890:
         st.toast("🛑 Klockan är efter 14:45. Inleveransen är stängd för dagen!", icon="🔒")
 
@@ -207,17 +221,14 @@ if live_sim and st.session_state.sim_minutes < 1380:
 
     if (plock_klart or inbound_klart) and st.session_state.db_data["queue_pack"] > 0:
         omplacerade = 0
-        # Gå igenom alla medarbetare och fyll på packborden till exakt 11
         for emp, lokation in st.session_state.placering.items():
             nuvarande_packare = list(st.session_state.placering.values()).count("Packning")
             
             if nuvarande_packare < 11:
-                # Ta personal från zoner som är klara
                 if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
                     st.session_state.placering[emp] = "Packning"
                     omplacerade += 1
             else:
-                # Om vi redan har 11 packare, skicka resten (de sista 4) till Putaway så de inte står stilla
                 if (plock_klart and "Plock" in lokation) or (inbound_klart and "Inbound" in lokation):
                     st.session_state.placering[emp] = "Putaway Stock"
                     omplacerade += 1
