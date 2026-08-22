@@ -1,88 +1,164 @@
 import streamlit as st
+import time
+import requests
+import random
 
-# 1. INSTÄLLNINGAR FÖR HEMSIDAN
-st.set_page_config(page_title="Specsavers Optimizer", layout="wide")
+# =====================================================================
+# 1. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS
+# =====================================================================
+try:
+    SUPABASE_URL = st.secrets["SUPABASE_URL"]
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except:
+    st.error("⚠️ Kom ihåg att lägga till dina Supabase-nycklar i Streamlit Secrets!")
+    st.stop()
 
-# Snygg rubrik högst upp
-st.title("👓 Specsavers Flödes-Optimering")
-st.subheader("Realtidssystem för personalsupport (Prototyp)")
+def fetch_live_data():
+    """Hämtar sekundfärsk data från din nyss uppdaterade Supabase-tabell"""
+    headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+    url = f"{SUPABASE_URL}/rest/v1/imi_live_data?select=*"
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        if data and len(data) > 0: 
+            return data[0] # Hämtar den raden du nyss uppdaterade
+    except: 
+        pass
+    
+    # Högkvalitativ reserv (Fallback) med dina exakta siffror om uppkopplingen bryts
+    return {
+        "queue_pick_stock": 4500, "queue_pick_non_stock": 800, "queue_pack": 400,
+        "inbound_stock": 6, "inbound_non_stock": 2, "putaway_stock": 120, "putaway_non_stock": 20
+    }
+
+# =====================================================================
+# 2. HEMSIDANS GRUNDINSTÄLLNINGAR & FORMAT
+# =====================================================================
+st.set_page_config(page_title="Specsavers Core Optimizer", layout="wide")
+st.title("👓 Specsavers Flödes-Optimering (Live-Demo)")
+st.caption("Intelligent beslutsstöd kopplat i realtid mot din Supabase-databas")
 st.markdown("---")
 
-# 2. SIDOPANEL: HÄR STYR DU PERSONALEN
-st.sidebar.header("👥 Dagens Bemanning")
-st.sidebar.write("Ställ in hur många som jobbar just nu:")
+# =====================================================================
+# 3. SIDOPANEL: BEMANNING PER SPECIFIK ROLL (Max 30 personer)
+# =====================================================================
+st.sidebar.header("🕹️ Demo-kontroller")
+live_sim = st.sidebar.toggle("▶️ Starta Live-Simulering", value=False)
+if live_sim:
+    st.sidebar.caption("🔄 Sidan uppdateras och hämtar ny data var 3:e sekund...")
 
-p_pick = st.sidebar.slider("Personal på Plock & Pack", 1, 30, 18)
-p_inbound = st.sidebar.slider("Personal på Inbound", 1, 30, 6)
-p_putaway = st.sidebar.slider("Personal på Inlagring (Putaway)", 1, 30, 6)
+st.sidebar.markdown("---")
+st.sidebar.header("👥 Aktiv Bemanning (Skift)")
 
-# Visa totalen så du har koll på dina 30 personer
-total_staff = p_pick + p_inbound + p_putaway
-st.sidebar.info(f"Totalt schemalagda: {total_staff} av 30 personer")
+st.sidebar.subheader("📥 Inbound & Inlagring")
+p_in_stock = st.sidebar.slider("Inbound Stock", 0, 10, 3)
+p_in_non = st.sidebar.slider("Inbound Non-Stock", 0, 5, 1)
+# HÄR ÄR DITT BESLUT: Max 2 personer på Putaway Stock eftersom 20-30 pall/vecka räcker gott och väl
+p_put_stock = st.sidebar.slider("Putaway Stock (Max 2 räcker)", 0, 2, 2) 
+p_put_non = st.sidebar.slider("Putaway Non-Stock", 0, 5, 1)
 
-# 3. INTERAKTIV DATA (Här simulerar vi databasen live på skärmen)
-st.markdown("### 📊 Aktuell arbetsbörda (Hämtas live från IMI)")
-st.write("Under presentationen kan du ändra siffrorna nedan för att visa hur AI:n reagerar direkt.")
+st.sidebar.subheader("🛒 Produktion (Plock & Pack)")
+p_pick_stock = st.sidebar.slider("Plock Stock", 0, 25, 14)
+p_pick_non = st.sidebar.slider("Plock Non-Stock", 0, 15, 3)
+p_pack = st.sidebar.slider("Packstationer (Packare)", 0, 25, 6)
 
-col1, col2, col3 = st.columns(3)
+# Räkna ut totalen live
+total_staff = p_in_stock + p_in_non + p_put_stock + p_put_non + p_pick_stock + p_pick_non + p_pack
+st.sidebar.info(f"Totalt fördelad personal: {total_staff} av 30 personer")
 
-with col1:
-    orders = st.number_input("Order kvar i plockkön:", value=5200, step=100)
-    st.metric(label="🛒 Plockstatus", value=f"{orders} order")
+# Prestationstakt (Går att justera live på mötet för att simulera trögt flöde)
+st.sidebar.markdown("---")
+st.sidebar.header("⏱️ Prestationstakt (Performance)")
+speed_pick = st.sidebar.slider("Plockhastighet (Order/h per person)", 15, 60, 45)
+speed_pack = st.sidebar.slider("Packhastighet (Order/h per person)", 20, 80, 55)
 
-with col2:
-    pallets = st.number_input("Pallar som väntar på Inbound:", value=28, step=1)
-    st.metric(label="📥 Inboundstatus", value=f"{pallets} pallar")
+# =====================================================================
+# 4. DATAHANTERING (Hämta från Supabase eller kör simulering)
+# =====================================================================
+if 'db_data' not in st.session_state:
+    st.session_state.db_data = fetch_live_data()
 
-with col3:
-    putaway = st.number_input("Inlagringsrader kvar (Putaway):", value=450, step=50)
-    st.metric(label="📦 Inlagringsstatus", value=f"{putaway} rader")
+# Om du slår på live-simuleringen tickar siffrorna realistiskt utifrån din bemanning
+if live_sim:
+    # Nya order trillar in på tvåskiftet (mål 6000-10000 om dagen)
+    st.session_state.db_data["queue_pick_stock"] += random.randint(15, 45) - int((p_pick_stock * speed_pick) / 1200)
+    st.session_state.db_data["queue_pick_non_stock"] += random.randint(5, 20) - int((p_pick_non * speed_pick) / 1200)
+    
+    # Det som plockas skickas vidare till pack-kön!
+    total_plockat = int(((p_pick_stock + p_pick_non) * speed_pick) / 1200)
+    total_packat = int((p_pack * speed_pack) / 1200)
+    st.session_state.db_data["queue_pack"] += total_plockat - total_packat
+    
+    # Inbound rör sig långsamt eftersom det bara är 20-30 pallar i veckan
+    if random.random() > 0.8:
+        st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] + random.choice([-1, 0, 1]))
+
+# =====================================================================
+# 5. VISA DIN NYA VERKLIGHETSTROGNA STATUS PÅ SKÄRMEN
+# =====================================================================
+st.subheader("📊 Aktuell IMI-Status (Baserat på era volymer)")
+
+# Rad 1: Inbound & Putaway
+st.markdown("#### 📥 Varumottagning & Inlagring")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Inbound STOCK (Pallar på bryggan)", f"{st.session_state.db_data['inbound_stock']} st")
+col2.metric("Inbound NON-STOCK (Enstaka gods)", f"{st.session_state.db_data['inbound_non_stock']} st")
+col3.metric("Putaway STOCK (Rader kvar på golv)", f"{st.session_state.db_data['putaway_stock']} rader")
+col4.metric("Putaway NON-STOCK (Rader kvar)", f"{st.session_state.db_data['putaway_non_stock']} rader")
+
+# Rad 2: Plock & Pack
+st.markdown("#### 🛒 Produktion (6 000 - 10 000 Orderbörda)")
+col5, col6, col7 = st.columns(3)
+col5.metric("Plockkö STOCK", f"{st.session_state.db_data['queue_pick_stock']} order")
+col6.metric("Plockkö NON-STOCK", f"{st.session_state.db_data['queue_pick_non_stock']} order")
+col7.metric("Väntar vid PACKSTATIONER", f"{st.session_state.db_data['queue_pack']} order")
 
 st.markdown("---")
 
-# 4. MATEMATIKEN OCH LOGIKEN (AI-Hjärnan)
-# Vi räknar ut hur mycket varje person hinner med per timme
-PICK_SPEED = 45      # En person hinner 45 order i timmen
-INBOUND_SPEED = 3    # En person hinner packa upp 3 pallar i timmen
-PUTAWAY_SPEED = 40   # En person hinner registrera och lägga undan 40 rader i timmen
+# =====================================================================
+# 6. TIDSKALKYLER OCH DIAGNOSMOTOR (AI-HJÄRNAN)
+# =====================================================================
+time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(p_pick_stock * speed_pick, 1)
+time_pick_non = st.session_state.db_data['queue_pick_non_stock'] / max(p_pick_non * speed_pick, 1)
+time_pack = st.session_state.db_data['queue_pack'] / max(p_pack * speed_pack, 1)
 
-# Hur mycket hinner hela avdelningen med på en timme?
-total_pick_capacity = p_pick * PICK_SPEED
-total_inbound_capacity = p_inbound * INBOUND_SPEED
-total_putaway_capacity = p_putaway * PUTAWAY_SPEED
+st.subheader("🧠 Systemdiagnos & AI-Rekommendationer")
 
-# Hur många timmars arbete ligger kvar på hög? (Siffran delas med kapaciteten)
-hours_left_pick = orders / max(total_pick_capacity, 1)
-hours_left_inbound = pallets / max(total_inbound_capacity, 1)
-hours_left_putaway = putaway / max(total_putaway_capacity, 1)
+# DETEKTERA OM PRODUKTIONEN ÄR LÅNGSAM OCH VARFÖR
+if speed_pick < 35:
+    st.error("🚨 **PRODUKTIONSVARNING: TRÖGT FLÖDE I GÅNGARNA!**")
+    st.markdown(f"**Orsaksanalys:** Plockhastigheten har sjunkit till tröga **{speed_pick} order/h per person**. Detta indikerar trängsel på plockytan eller att ni just nu kör den månatliga **Danmark-leveransen** (tyngre orderstruktur).")
+    st.info(f"💡 **Omedelbar åtgärd:** Eftersom inlagringen flyter på bra med dina {p_put_stock} personer, bör du flytta **2 personer från Inbound Stock till Plock Stock** för att hålla tidsplanen.")
 
-# 5. PRESENTATION AV ANALYSEN
-st.markdown("### 🧠 Gruppledarens AI-Beslutsstöd")
+# DETEKTERA PROPP VID PACKNINGEN
+elif time_pack > time_pick_stock and st.session_state.db_data['queue_pack'] > 600:
+    st.error("🚨 **PRODUKTIONSSTOPP: FLASKHALS VID PACKBORDEN!**")
+    st.markdown(f"**Orsaksanalys:** Plockarna levererar snabbare än packstationerna hinner försegla kartongerna. Det står **{st.session_state.db_data['queue_pack']} order** på vagnarna och blockerar golvet.")
+    st.info("💡 **Omedelbar åtgärd:** Sätt tillfälligt stopp för plockare. **Flytta 2 personer från Plock Stock till Packstationerna** direkt.")
 
-# Vi skapar tre snygga boxar som visar tidsåtgången
-b1, b2, b3 = st.columns(3)
-b1.write(f"Tid till tom kö i Plock: **{hours_left_pick:.1f} timmar**")
-b2.write(f"Tid till tom brygga på Inbound: **{hours_left_inbound:.1f} timmar**")
-b3.write(f"Tid till tom golvyta i Inlagring: **{hours_left_putaway:.1f} timmar**")
-
-st.write("")
-
-# SMART REKOMMENDATION (Här känner systemet av flaskhalsar)
-if hours_left_pick > 3.5 and hours_left_inbound < 1.5 and p_inbound > 2:
-    st.error("🚨 **KRITISK FLASKHALS: PLOCKET SÄCKAR IHOP!**")
-    st.markdown(f"**Analys:** Med nuvarande tempo kommer plocket att ta {hours_left_pick:.1f} timmar. Lastbilarna till Norge/Finland kommer att missas!")
-    st.info("💡 **Åtgärdsförslag:** Flytta omedelbart **2 personer från Inbound till Plock & Pack**.")
-
-elif hours_left_inbound > 4.0 and hours_left_pick < 2.0 and p_pick > 10:
-    st.warning("⚠️ **VARNING: INBOUND BLIR ÖVERFULLT!**")
-    st.markdown(f"**Analys:** Lastbilarna har öst av gods. Det tar {hours_left_inbound:.1f} timmar att beta av. Det finns risk för stopp på mottagningsytan.")
-    st.info("💡 **Åtgärdsförslag:** Flytta **2-3 personer från Plock till Inbound** tillfälligt.")
-
-elif hours_left_putaway > 3.0 and hours_left_inbound < 1.0 and p_inbound > 2:
-    st.warning("📦 **FLASKHALS: VAROR LIGGER PÅ GOLVET (PUTAWAY)!**")
-    st.markdown("**Analys:** Godset är mottaget på inbound, men har inte kommit upp på hyllorna än. Plockarna kommer inte hitta varorna i systemet!")
-    st.info("💡 **Åtgärdsförslag:** Flytta **1 person från Inbound till Inlagring (Putaway)**.")
+# DETEKTERA OM NON-STOCK LIGGER OCH VÄNTAR FÖR LÄNGE
+elif time_pick_non > 2.5:
+    st.warning("⚠️ **AVVIKELSE: NON-STOCK-ORDER SLÄPAR EFTER!**")
+    st.markdown(f"**Orsaksanalys:** Direktordrarna (Non-Stock) har en beräknad ledtid på {time_pick_non:.1f} timmar. Eftersom dessa ska med dagens lastbilar till Norge/Finland/NL brådskar det.")
+    st.info("💡 **Omedelbar åtgärd:** Förstärk direktflödet. **Flytta 1 person från Inbound Stock till Plock Non-Stock**.")
 
 else:
-    st.success("✅ **OPTIMAL BALANS PÅ LAGRET!**")
-    st.write("Just nu matchar din personalfördelning arbetsbördan perfekt. Inga åtgärder krävs.")
+    st.success("✅ **FLÖDET ÄR OPTIMALT BALANSERAT**")
+    st.write("Produktionstakten är hög, inlagringen är stabil på 2 personer, och alla avdelningar jobbar i perfekt symetri.")
+
+# =====================================================================
+# 7. TIDSPROGNOS-TABELL
+# =====================================================================
+st.markdown("### 📊 Detaljerad tidsprognos för skiftet")
+prognos_data = {
+    "Processflöde": ["Plock: Stock", "Plock: Non-Stock", "Packning (Slutsteg)", "Inlagring: Stock", "Inlagring: Non-Stock"],
+    "Bemanning (Antal)": [p_pick_stock, p_pick_non, p_pack, p_put_stock, p_put_non],
+    "Kapacitet / timme": [p_pick_stock*speed_pick, p_pick_non*speed_pick, p_pack*speed_pack, p_put_stock*40, p_put_non*40],
+    "Tid till tomt (Timmar)": [round(time_pick_stock, 1), round(time_pick_non, 1), round(time_pack, 1), round(st.session_state.db_data['putaway_stock']/max(p_put_stock*40,1),1), round(st.session_state.db_data['putaway_non_stock']/max(p_put_non*40,1),1)]
+}
+st.table(prognos_data)
+
+# Automatisk uppdatering (loop)
+if live_sim:
+    time.sleep(3)
+    st.rerun()
