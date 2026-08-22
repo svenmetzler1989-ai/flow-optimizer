@@ -3,11 +3,6 @@ import time
 import requests
 import random
 
-import streamlit as st
-import time
-import requests
-import random
-
 # =====================================================================
 # 1. LIVE-KOPPLING TILL DIN SUPABASE-DATABAS (Helt felsäker version)
 # =====================================================================
@@ -25,17 +20,14 @@ def fetch_live_data():
         response = requests.get(url, headers=headers)
         data = response.json()
         
-        # Om vi får ett svar från databasen, kontrollera att det är en lista med data
         if isinstance(data, list) and len(data) > 0:
-            row = data[0] # Ta första raden
-            # Kontrollera att kolumnen 'inbound_stock' faktiskt finns i det vi fick tillbaka
+            row = data[0]
             if "inbound_stock" in row:
                 return row
     except: 
         pass
     
-    # FALLBACK: Om Supabase-tabellen är tom, har fel kolumnnamn eller stora bokstäver,
-    # så kraschar inte appen! Den använder istället dessa perfekta Specsavers-volymer under demot:
+    # FALLBACK: Om något saknas i Supabase kör vi dessa perfekta Specsavers-volymer
     return {
         "queue_pick_stock": 4500, 
         "queue_pick_non_stock": 800, 
@@ -45,7 +37,6 @@ def fetch_live_data():
         "putaway_stock": 120, 
         "putaway_non_stock": 20
     }
-
 
 # =====================================================================
 # 2. HEMSIDANS GRUNDFORMAT
@@ -66,12 +57,9 @@ medarbetare_info = {
     "EMP-105": {"namn": "Mikael", "pick_speed": 95, "pack_speed": 105, "putaway_speed": 70, "start_zon": "Inbound Stock"},
 }
 
-# Genererar automatiskt EMP-106 till EMP-130 för att fylla upp till 30 personer
-# Du kan ändra namnen och hastigheterna här under när som helst!
 start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Inbound Stock", "Putaway Non-Stock", "Plock Non-Stock"]
 for i in range(106, 131):
     emp_id = f"EMP-{i}"
-    # Slumpa lite realistiska bashastigheter runt dina måltal (100 plock, 110 pack, 80 putaway)
     medarbetare_info[emp_id] = {
         "namn": f"Medarbetare {i}",
         "pick_speed": random.randint(90, 115),
@@ -81,12 +69,14 @@ for i in range(106, 131):
     }
 
 # =====================================================================
-# 4. DATAHANTERING OCH MINNE FOR PLACERING
+# 4. DEMOKONTROLLER OCH MINNE FÖR PLACERING
 # =====================================================================
+st.sidebar.header("🕹️ Demo-kontroller")
+live_sim = st.sidebar.toggle("▶️ Starta Live-Simulering", value=False)
+
 if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
-# Sätt grundplacering baserat på medarbetarnas start-zoner
 if 'placering' not in st.session_state:
     st.session_state.placering = {emp_id: info["start_zon"] for emp_id, info in medarbetare_info.items()}
 
@@ -110,11 +100,9 @@ st.write("Ändra avdelning direkt i listan nedan för att styra om ditt 30-manna
 
 ROLLER = ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Stock", "Plock Non-Stock", "Packning"]
 
-# Vi delar upp de 30 personerna i 3 snygga kolumner på skärmen så det blir lätt att överblicka
 emp_list = list(medarbetare_info.keys())
 c_emp1, c_emp2, c_emp3 = st.columns(3)
 
-# Kolumn 1 (Anställd 1-10)
 with c_emp1:
     st.markdown("**Anställd 1 - 10**")
     for emp_id in emp_list[:10]:
@@ -124,7 +112,6 @@ with c_emp1:
             index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}"
         )
 
-# Kolumn 2 (Anställd 11-20)
 with c_emp2:
     st.markdown("**Anställd 11 - 20**")
     for emp_id in emp_list[10:20]:
@@ -134,7 +121,6 @@ with c_emp2:
             index=ROLLER.index(st.session_state.placering[emp_id]), key=f"sel_{emp_id}"
         )
 
-# Kolumn 3 (Anställd 21-30)
 with c_emp3:
     st.markdown("**Anställd 21 - 30**")
     for emp_id in emp_list[20:30]:
@@ -155,24 +141,29 @@ p_pick_stock = list(st.session_state.placering.values()).count("Plock Stock")
 p_pick_non = list(st.session_state.placering.values()).count("Plock Non-Stock")
 p_pack = list(st.session_state.placering.values()).count("Packning")
 
-# Addera ihop de exakta hastigheterna för de som är i respektive zon
 total_pick_stock_speed = sum(medarbetare_info[emp]["pick_speed"] for emp in medarbetare_info if st.session_state.placering[emp] == "Plock Stock")
 total_pick_non_speed = sum(medarbetare_info[emp]["pick_speed"] for emp in medarbetare_info if st.session_state.placering[emp] == "Plock Non-Stock")
 total_pack_speed = sum(medarbetare_info[emp]["pack_speed"] for emp in medarbetare_info if st.session_state.placering[emp] == "Packning")
 total_put_stock_speed = sum(medarbetare_info[emp]["putaway_speed"] for emp in medarbetare_info if st.session_state.placering[emp] == "Putaway Stock")
 total_put_non_speed = sum(medarbetare_info[emp]["putaway_speed"] for emp in medarbetare_info if st.session_state.placering[emp] == "Putaway Non-Stock")
 
-# Inbound (35 min per stockpall = 1.71 pall/h)
 total_in_stock_speed = p_in_stock * 1.71
 total_in_non_speed = p_in_non * 5.0
 
-# Sidopanelkontroller för simuleringstakt
+# Prestandamål och inställningar i sidopanelen
 st.sidebar.markdown("---")
 st.sidebar.header("⚙️ Skiftets Tempo")
-live_sim_speed = st.sidebar.slider("Simuleringshastighet", 10, 100, 40, help="Högre tal gör att köerna minskar snabbare på skärmen")
+speed_pick = st.sidebar.slider("Plockhastighet (Order/h per person)", 40, 150, 100)
+live_sim_speed = st.sidebar.slider("Simuleringshastighet", 10, 100, 40)
+
+SPEED_INBOUND_STOCK = 1.71  
+SPEED_INBOUND_NON_STOCK = 5.0  
+SPEED_PUTAWAY_STOCK = 80         
+SPEED_PUTAWAY_NON_STOCK = 120    
+SPEED_PACK = 110                 
 
 # =====================================================================
-# 8. SIMULERINGSLOGIK (Tickar nedåt baserat på de 30 personernas arbete)
+# 8. SIMULERINGSLOGIK
 # =====================================================================
 if live_sim:
     plockat_stock = int(total_pick_stock_speed / live_sim_speed)
@@ -203,7 +194,7 @@ def flytta_medarbetare_till(avdelning_från, avdelning_till):
     for emp, lokation in st.session_state.placering.items():
         if lokation == avdelning_från:
             st.session_state.placering[emp] = avdelning_till
-            st.toast(f"跑 {medarbetare_info[emp]['namn']} flyttades till {avdelning_till}!", icon="✅")
+            st.toast(f"✅ Medarbetare flyttades till {avdelning_till}!", icon="🏃")
             break
 
 # Flaskhals A: Packborden hinner inte med de 30 personerna
@@ -253,4 +244,3 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(3)
     st.rerun()
-
