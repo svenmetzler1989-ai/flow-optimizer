@@ -39,7 +39,7 @@ st.markdown("""
         overflow: hidden;
     }
     </style>
-""", unsafe_transform=True)
+""", unsafe_allow_html=True)
 
 st.title("👓 Specsavers Live Core Optimizer")
 st.caption("Avancerad flödesoptimering med automatisk lagerkedja och visuell målstyrning")
