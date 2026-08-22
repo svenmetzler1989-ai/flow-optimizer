@@ -102,23 +102,34 @@ speed_pick = st.sidebar.slider("Plockhastighet (Order/h per person)", 40, 150, 1
 SPEED_PACK = 110  
 
 # =====================================================================
-# 5. DATAHANTERING OCH SIMULERING
+# 5. DATAHANTERING OCH SIMULERING (Uppdaterad för att visa personalens effekt)
 # =====================================================================
 if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
 
 if live_sim:
-    # Plock och pack tuggar på utifrån era snabba plockmål (100 st/h)
-    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] + random.randint(30, 80) - int((p_pick_stock * speed_pick) / 1200))
-    st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] + random.randint(10, 40) - int((p_pick_non * speed_pick) / 1200))
+    # 1. Hur mycket nytt arbete kommer in på lagret just nu?
+    NYA_STOCK_ORDER = random.randint(40, 80)
+    NYA_NON_STOCK_ORDER = random.randint(10, 30)
     
-    total_plockat = int(((p_pick_stock + p_pick_non) * speed_pick) / 1200)
-    total_packat = int((p_pack * SPEED_PACK) / 1200)
-    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_plockat - total_packat)
+    # 2. Hur mycket hinner din personal plocka bort (baserat på 100 order/h per person)?
+    # Vi delar med 300 för att anpassa hastigheten så det syns snyggt i demot
+    personalen_plockar_stock = int((p_pick_stock * speed_pick) / 300)
+    personalen_plockar_non = int((p_pick_non * speed_pick) / 300)
     
-    if random.random() > 0.8:
-        st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - int((p_in_stock * SPEED_INBOUND_STOCK) / 10))
-        st.session_state.db_data["inbound_non_stock"] = max(0, st.session_state.db_data["inbound_non_stock"] - int((p_in_non * SPEED_INBOUND_NON_STOCK) / 10))
+    # 3. Uppdatera plockköerna live (Inkommande minus Personalens arbete)
+    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] + NYA_STOCK_ORDER - personalen_plockar_stock)
+    st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] + NYA_NON_STOCK_ORDER - personalen_plockar_non)
+    
+    # 4. Packflödet (Det som plockas skickas till packkön, minus vad packarna hinner försegla med 110/h)
+    personalen_packar = int((p_pack * SPEED_PACK) / 300)
+    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (personalen_plockar_stock + personalen_plockar_non) - personalen_packar)
+    
+    # 5. Inbound (Pallar betas av baserat på 35 min/pall när det finns personal där)
+    if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0:
+        if random.random() > 0.4:  # 60% chans att en pall försvinner per tick om det finns folk
+            st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - 1)
+
 
 # =====================================================================
 # 6. VISA AKTUELLT LÄGE PÅ SKÄRMEN
@@ -185,7 +196,7 @@ elif time_pick_non > 2.5:
         utför_åtgärd('p_in_stock', 'p_pick_non', 1)
         st.rerun()
 
-        
+
 # =====================================================================
 # 8. PRESTATIONSTABELL
 # =====================================================================
