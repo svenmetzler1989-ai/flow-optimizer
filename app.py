@@ -168,7 +168,7 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA
+# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AI-BESLUTSSTÖD
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
@@ -184,18 +184,63 @@ if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
+    # 📥 Simulerat inflöde: Chans att det plötsligt rullar in nya pallar mitt under skiftet!
+    if random.random() > 0.95:
+        st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
+        st.toast("🚚 Ny leverans! Fler pallar har landat på Inbound Stock.", icon="🚚")
+
+    # LAGERKEDJA: Inbound Stock betas av
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
         st.session_state.db_data["inbound_stock"] -= 1
         st.session_state.db_data["putaway_stock"] += 20  
 
+    # LAGERKEDJA: Inbound Non-Stock betas av
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
+    # Lagerkedja för Non-Stock plock
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
+
+# HÄR LÄGGER VI IN DINA NYA AI-VARNINGSTRIANGLAR OCH GODKÄNNANDE-KNAPPAR
+st.markdown("### 🚦 AI Flödesassistent (Beslutsstöd)")
+
+# Hjälpfunktion för att manuellt styra om första lediga medarbetare via knapp
+def flytta_en_person(fran_zon, till_zon):
+    for emp, lokation in st.session_state.placering.items():
+        if lokation == fran_zon:
+            st.session_state.placering[emp] = till_zon
+            st.toast(f"🏃 {st.session_state.medarbetare_info[emp]['namn']} omstyrd till {till_zon}!", icon="✅")
+            st.rerun()
+            break
+
+# SCENARIO 1: Inbound Stock är helt klart, men personal står kvar där
+if st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
+    st.warning("⚠️ **FLÖDESVARNING: INBOUND STOCK ÄR KLART!**")
+    st.markdown(f"Det finns inga pallar kvar på Inbound, men **{p_in_stock} medarbetare** står kvar på zonen utan arbetsuppgifter.")
+    if st.button("🏃 Verkställ: Flytta 1 ledig medarbetare till Putaway Stock", key="ai_move_in_to_put"):
+        flytta_en_person("Inbound Stock", "Putaway Stock")
+
+# SCENARIO 2: Plock Stock är helt klart, men personal plockar fortfarande luft
+if st.session_state.db_data["queue_pick_stock"] == 0 and p_pick_stock > 0:
+    st.warning("⚠️ **FLÖDESVARNING: PLOCK STOCK ÄR TOMT!**")
+    st.markdown(f"Målet för Plock Stock är nått! Flytta dina **{p_pick_stock} plockare** till packstationerna för att stänga skiftet.")
+    if st.button("🏃 Verkställ: Flytta 1 ledig plockare till Packning", key="ai_move_pick_to_pack"):
+        flytta_en_person("Plock Stock", "Packning")
+
+# SCENARIO 3: Det har kommit in nya pallar på Inbound, men ingen jobbar där
+if st.session_state.db_data["inbound_stock"] > 0 and p_in_stock == 0:
+    st.info("💡 **FLÖDESREKOMMENDATION: NYTT GODS PÅ INBOUND**")
+    st.markdown(f"Det ligger **{st.session_state.db_data['inbound_stock']} pallar** på Inbound Stock, men ingen personal är tilldelad. Risk för stockning i mottagningen.")
+    if p_pack > 2: # Flytta bara om vi har tillräckligt med packare
+        if st.button("🏃 Verkställ: Flytta 1 medarbetare från Packning till Inbound Stock", key="ai_move_pack_to_in"):
+            flytta_en_person("Packning", "Inbound Stock")
+
+st.markdown("---")
+
 
 # =====================================================================
 # 7. FUNKTION FÖR ATT SKAPA SMARTA, FÄRGKODADE GRAFER
