@@ -231,7 +231,7 @@ with col_g2:
 st.markdown("---")
 
 # =====================================================================
-# 8. REALTIDSTATUS (Siffrorna från Supabase)
+# 8. REALTIDSTATUS (Inklusive alla Non-Stock-volymer)
 # =====================================================================
 st.subheader("📊 Aktuell IMI-Status (Köer just nu)")
 col1, col2, col3, col4 = st.columns(4)
@@ -239,6 +239,13 @@ col1.metric("Inbound STOCK (Pallar)", f"{st.session_state.db_data['inbound_stock
 col2.metric("Putaway STOCK (Rader)", f"{st.session_state.db_data['putaway_stock']} rader")
 col3.metric("Plockkö STOCK (Order)", f"{st.session_state.db_data['queue_pick_stock']} order")
 col4.metric("Väntar vid PACKSTATIONER", f"{st.session_state.db_data['queue_pack']} order")
+
+# Extra rad för Non-Stock-volymerna under de ordinarie mätarna
+col_n1, col_n2, col_n3, col_n4 = st.columns(4)
+col_n1.metric("Inbound NON-STOCK (Pallar)", f"{st.session_state.db_data['inbound_non_stock']} st")
+col_n2.metric("Putaway NON-STOCK (Rader)", f"{st.session_state.db_data['putaway_non_stock']} rader")
+col_n3.metric("Plockkö NON-STOCK (Order)", f"{st.session_state.db_data['queue_pick_non_stock']} order")
+col_n4.empty() # Lämnas tom för att behålla symmetrin i gränssnittet
 
 st.markdown("---")
 
@@ -267,8 +274,8 @@ with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka fö
     namn_val_lista = [f"{st.session_state.medarbetare_info[eid]['namn']} ({eid})" for eid in emp_list]
     valt_namn_med_id = st.selectbox("Välj en medarbetare för att granska effektivitet:", namn_val_lista)
     
-    # Extrahera ID korrekt
-    valt_id = valt_namn_med_id.split("(")[1].replace(")", "")
+    # Hittar rätt ID baserat på valet i rullistan
+    valt_id = [eid for eid in emp_list if st.session_state.medarbetare_info[eid]['namn'] in valt_namn_med_id][0]
     valda_info = st.session_state.medarbetare_info[valt_id]
     valda_zon = st.session_state.placering[valt_id]
     
@@ -277,7 +284,7 @@ with st.expander("🔍 Hantera och ställ om de 30 medarbetarkoderna (Klicka fö
     col_e2.write(f"**Klockad kapacitet:** {valda_info['pick_speed']} order/h plock | {valda_info['pack_speed']} paket/h pack")
 
 # =====================================================================
-# 10. TIDSKALKYLER OCH DIAGNOSMOTOR
+# 10. TIDSKALKYLER OCH DIAGNOSMOTOR (AI-Åtgärdsförslag)
 # =====================================================================
 time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(total_pick_stock_speed, 0.1)
 time_pack = st.session_state.db_data['queue_pack'] / max(total_pack_speed, 0.1)
@@ -331,4 +338,3 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(2)
     st.rerun()
-
