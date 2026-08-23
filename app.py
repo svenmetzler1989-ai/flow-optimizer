@@ -1,11 +1,11 @@
-import streamlit as st
+import streamlit as st  # <-- HÄR ÄR ÄNDRINGEN (Från str till st)
 import pandas as pd
 import numpy as np
 import random
 import time
 
 # =====================================================================
-# 1. KONFIGURATION OCH DESIGN (Specsavers Tema)
+# 1. KONFIGURATION OCH DESIGN (Specsavers Tema - KORRIGERAD)
 # =====================================================================
 st.set_page_config(
     page_title="Specsavers WMS Flow Optimizer",
@@ -29,6 +29,7 @@ st.markdown("""
 
 st.title("🟩 Specsavers WMS Flow Optimizer")
 st.subheader("AI-Driven Driftstyrning & Resursallokering i Real-Time")
+d
 
 
 # =====================================================================
