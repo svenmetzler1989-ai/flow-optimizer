@@ -59,28 +59,26 @@ def fetch_live_data():
         "queue_pack": START_PACK
     }
 
-
 # =====================================================================
-# 3. MEDARBETARDATABAS (NAMNGIVEN OCH KALIBRERAD FÖR 15 PERSONER)
+# 3. MEDARBETARDATABAS (⚡ ÅTERSTÄLLT SNITTTEMPO TILL 100 RADER/H)
 # =====================================================================
 if 'medarbetare_info' not in st.session_state:
-    # 👥 Alla 15 unika medarbetare har nu fått sina riktiga namn
     medarbetare_info = {
-        "EMP-101": {"namn": "Anna", "pick_speed": 91, "pack_speed": 95, "putaway_speed": 85, "start_zon": "Plock Stock"},
-        "EMP-102": {"namn": "Per", "pick_speed": 89, "pack_speed": 105, "putaway_speed": 75, "start_zon": "Packning"},
-        "EMP-103": {"namn": "Lars", "pick_speed": 90, "pack_speed": 100, "putaway_speed": 95, "start_zon": "Putaway Stock"},
-        "EMP-104": {"namn": "Elin", "pick_speed": 92, "pack_speed": 98, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
-        "EMP-105": {"namn": "Mikael", "pick_speed": 88, "pack_speed": 102, "putaway_speed": 70, "start_zon": "Inbound Stock"},
-        "EMP-106": {"namn": "Karin", "pick_speed": 90, "pack_speed": 97, "putaway_speed": 78, "start_zon": "Packning"},
-        "EMP-107": {"namn": "Anders", "pick_speed": 93, "pack_speed": 103, "putaway_speed": 82, "start_zon": "Plock Stock"},
-        "EMP-108": {"namn": "Johan", "pick_speed": 87, "pack_speed": 101, "putaway_speed": 84, "start_zon": "Putaway Stock"},
-        "EMP-109": {"namn": "Sara", "pick_speed": 91, "pack_speed": 104, "putaway_speed": 76, "start_zon": "Plock Non-Stock"},
-        "EMP-110": {"namn": "Nils", "pick_speed": 89, "pack_speed": 96, "putaway_speed": 80, "start_zon": "Plock Stock"},
-        "EMP-111": {"namn": "Emma", "pick_speed": 92, "pack_speed": 102, "putaway_speed": 85, "start_zon": "Packning"},
-        "EMP-112": {"namn": "Sven", "pick_speed": 88, "pack_speed": 99, "putaway_speed": 79, "start_zon": "Plock Stock"},
-        "EMP-113": {"namn": "Maria", "pick_speed": 90, "pack_speed": 105, "putaway_speed": 81, "start_zon": "Packning"},
-        "EMP-114": {"namn": "Olof", "pick_speed": 91, "pack_speed": 98, "putaway_speed": 83, "start_zon": "Plock Stock"},
-        "EMP-115": {"namn": "Linda", "pick_speed": 89, "pack_speed": 100, "putaway_speed": 77, "start_zon": "Plock Stock"}
+        "EMP-101": {"namn": "Anna", "pick_speed": 101, "pack_speed": 95, "putaway_speed": 85, "start_zon": "Plock Stock"},
+        "EMP-102": {"namn": "Per", "pick_speed": 99, "pack_speed": 105, "putaway_speed": 75, "start_zon": "Packning"},
+        "EMP-103": {"namn": "Lars", "pick_speed": 100, "pack_speed": 100, "putaway_speed": 95, "start_zon": "Putaway Stock"},
+        "EMP-104": {"namn": "Elin", "pick_speed": 102, "pack_speed": 98, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
+        "EMP-105": {"namn": "Mikael", "pick_speed": 98, "pack_speed": 102, "putaway_speed": 70, "start_zon": "Inbound Stock"},
+        "EMP-106": {"namn": "Karin", "pick_speed": 100, "pack_speed": 97, "putaway_speed": 78, "start_zon": "Packning"},
+        "EMP-107": {"namn": "Anders", "pick_speed": 103, "pack_speed": 103, "putaway_speed": 82, "start_zon": "Plock Stock"},
+        "EMP-108": {"namn": "Johan", "pick_speed": 97, "pack_speed": 101, "putaway_speed": 84, "start_zon": "Putaway Stock"},
+        "EMP-109": {"namn": "Sara", "pick_speed": 101, "pack_speed": 104, "putaway_speed": 76, "start_zon": "Plock Non-Stock"},
+        "EMP-110": {"namn": "Nils", "pick_speed": 99, "pack_speed": 96, "putaway_speed": 80, "start_zon": "Plock Stock"},
+        "EMP-111": {"namn": "Emma", "pick_speed": 102, "pack_speed": 102, "putaway_speed": 85, "start_zon": "Packning"},
+        "EMP-112": {"namn": "Sven", "pick_speed": 98, "pack_speed": 99, "putaway_speed": 79, "start_zon": "Plock Stock"},
+        "EMP-113": {"namn": "Maria", "pick_speed": 100, "pack_speed": 105, "putaway_speed": 81, "start_zon": "Packning"},
+        "EMP-114": {"namn": "Olof", "pick_speed": 101, "pack_speed": 98, "putaway_speed": 83, "start_zon": "Plock Stock"},
+        "EMP-115": {"namn": "Linda", "pick_speed": 99, "pack_speed": 100, "putaway_speed": 77, "start_zon": "Plock Stock"}
     }
     st.session_state.medarbetare_info = medarbetare_info
 
@@ -97,7 +95,6 @@ LAGER_ZONER = [
     "Sortering", "Utlastning", "Transport", "Returer", "Inventering", "Städning"
 ]
 
-# Sidopanels-meny för manuell omplacering (om användaren vill överstyra AI)
 st.sidebar.markdown("### 🛠️ Manuell Resursstyrning")
 valda_pers = st.sidebar.multiselect("Välj medarbetare att flytta:", list(st.session_state.medarbetare_info.keys()))
 ny_zon = st.sidebar.selectbox("Välj ny station/zon:", LAGER_ZONER)
@@ -261,9 +258,9 @@ if live_sim and st.session_state.sim_minutes < 1410:
             st.session_state.placering[emp] = "Plock Non-Stock"
             continue
             
-        # D. 🚛 UTLASTNING INFÖR TRANSPORTAVGÅNG (Kl 13:30 - 14:30)
+         # D. 🚛 UTLASTNING INFÖR TRANSPORTAVGÅNG (Kl 13:30 - 14:30) - ⚡ JUSTERAT TILL MAX 1 PERS
         elif 810 <= m < 870:
-            if get_count("Utlastning") < 2:
+            if get_count("Utlastning") < 1:  # Ändrat från 2 till max 1 person
                 st.session_state.placering[emp] = "Utlastning"
                 continue
             elif get_count("Transport") < 1:
@@ -537,24 +534,21 @@ with col_sh4:
 
 
 # =====================================================================
-# 15. EKONOMISKT UTFALL (UPPDATERAD MED EXAKT 289 KR/H OPERATÖRSLÖN)
+# 15. EKONOMISKT UTFALL (OPTIMAL VINSTTÄCKNING)
 # =====================================================================
 st.markdown("---")
 st.subheader("💰 Skiftets Ekonomiska Utfall (Real-Time P&L)")
 
 PRIS_IN_STOCK = 75.00     
 PRIS_IN_NON = 85.00       
-PRIS_OUT_ORDER = 1.15     
-PRIS_PACK_BOX = 3.20      
+PRIS_OUT_ORDER = 1.45     # Justerad för att garantera positiv marginal vid 100 rader/h
+PRIS_PACK_BOX = 4.80      # Justerad för att säkra vinsttäckning
 PRIS_INVENTERING_RAD = 15.00 
 
-# ⚡ KORREKTA LÖNER: 289 kr/h för lagret och 355 kr/h för dig som gruppledare
 LON_OPERATOR = 289.0     
 LON_LEADER = 355.0       
 
 effektiva_timmar = min(16.75, max(0.1, (st.session_state.sim_minutes - 360) / 60.0))
-
-# Räknar ut kostnaden baserat på 14 operatörer och 1 gruppledare (dig)
 kostnad_personal = int((14 * LON_OPERATOR * effektiva_timmar) + (1 * LON_LEADER * effektiva_timmar))
 
 intakt_in_stock = (6 - st.session_state.db_data["inbound_stock"]) * PRIS_IN_STOCK
@@ -585,6 +579,7 @@ st.info(
 if live_sim:
     time.sleep(5)
     st.rerun()
+
 
 
 
