@@ -154,9 +154,8 @@ st.sidebar.markdown(f"📦 **Putaway Stock:** `{p_put_stock} pers` (Kartonger)")
 st.sidebar.markdown(f"🛒 **Plock Stock:** `{p_pick_stock} pers` (Snitt: 50/h)")
 st.sidebar.markdown(f"📦 **Packbords-linje:** `{p_pack} pers` (Max 11 bord)")
 
-
 # =====================================================================
-# 6. SIMULERINGSLOGIK (KONTINUERLIG OCH DYNAMISK SORTERING 2-3 PERS)
+# 6. SIMULERINGSLOGIK (MAXIMAL FÖRMIDDAGSFOKUS, 2-3 NON-STOCK & MÅLGÅNG 20:30)
 # =====================================================================
 if "just_clicked" not in st.session_state:
     st.session_state.just_clicked = False
@@ -166,6 +165,8 @@ if "retur_notis" not in st.session_state:
     st.session_state.retur_notis = False
 if "retur_start_tid" not in st.session_state:
     st.session_state.retur_start_tid = 0
+if "totalt_inkommande_non" not in st.session_state:
+    st.session_state.totalt_inkommande_non = 1 # Startade på 1 pall enligt Punkt 2
 
 if live_sim and st.session_state.sim_minutes < 1290:
     if st.session_state.just_clicked:
@@ -187,7 +188,7 @@ if live_sim and st.session_state.sim_minutes < 1290:
     rörlig_personal_pool = []
     
     for emp in all_emps:
-        # 🚨 EFTER KL 20:30 (Plock & Pack är helt klart. Slutför Sortering och Putaway)
+        # 🚨 EFTER KL 20:30 (Skiftet stänger plock/pack. ALLA slutför Sortering och Putaway)
         if st.session_state.sim_minutes >= 1230:
             if get_count("Putaway Stock") < 8:
                 st.session_state.placering[emp] = "Putaway Stock"
@@ -195,7 +196,8 @@ if live_sim and st.session_state.sim_minutes < 1290:
                 st.session_state.placering[emp] = "Sortering"
             continue
 
-        # A. 📥 INBOUND & PUTAWAY KEDJORNA (Max 1 person per flödeskedja)
+        # A. 📥 DEDIKERADE RESURSER FÖR INBOUND & PUTAWAY KEDJORNA (Alltid låst 1 person per flöde)
+        # Stock-kedjan (1 person flyttar mellan kaj och hylla)
         if st.session_state.db_data["inbound_stock"] > 0 and get_count("Inbound Stock") < 1:
             st.session_state.placering[emp] = "Inbound Stock"
             continue
@@ -203,6 +205,7 @@ if live_sim and st.session_state.sim_minutes < 1290:
             st.session_state.placering[emp] = "Putaway Stock"
             continue
 
+        # Non-Stock-kedjan (1 person flyttar mellan kaj och hylla)
         if st.session_state.db_data["inbound_non_stock"] > 0 and get_count("Inbound Non-Stock") < 1:
             st.session_state.placering[emp] = "Inbound Non-Stock"
             continue
@@ -235,7 +238,7 @@ if live_sim and st.session_state.sim_minutes < 1290:
             st.session_state.placering[emp] = "Returer"
             continue
 
-        # F. SÄKRA ÅTERSTRÖMNING TILL DEN RÖRLIGA KÄRNAN
+        # F. SÄKRA ÅTERSTRÖMNING TILL DEN RÖRLIGA KÄRNAN (Plock & Pack)
         if current_placering[emp] in ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock", "Plock Non-Stock", "Returer", "Transport", "Utlastning", "Sortering"]:
             st.session_state.placering[emp] = "Plock Stock"
 
@@ -259,13 +262,21 @@ if live_sim and st.session_state.sim_minutes < 1290:
 
     # --- BERÄKNA PRODUKTION LIVE UTIFRÅN 10-MINUTERS TEMPO ---
     if st.session_state.sim_minutes < 1230:
-        hastighets_boost = 1.35
+        # ⚡ FÖRMIDDAGSFOKUS & PRODUKTIVITETSSKJUTS FRAM TILL 20:30
+        if st.session_state.sim_minutes <= 810:
+            # Fram till kl 13:30 (minut 810) kör vi en kraftfull "morgon-boost" för att tömma plocket inför transporten
+            hastighets_boost = 1.65
+        else:
+            # Efter 13:30 bibehåller vi ett starkt, jämnt tempo (1.25) hela eftermiddagen fram till kl 20:30
+            hastighets_boost = 1.25
+            
         plockat_stock = int(min(step_pick_stock * hastighets_boost, st.session_state.db_data["queue_pick_stock"]))
         plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
         
         step_pack_dynamisk = (p_pack * 110.0) / 6.0
         packat = int(min(step_pack_dynamisk * hastighets_boost, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
     else:
+        # Efter kl 20:30 stängs produktionen för dagen
         plockat_stock = 0
         plockat_non = 0
         packat = 0
@@ -283,10 +294,16 @@ if live_sim and st.session_state.sim_minutes < 1290:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # Inbound-pallar betas av på kajen
+    # --- INKOMMANDE GODS UNDER DAGEN ---
     if st.session_state.sim_minutes <= 1100 and random.random() > 0.93:
         st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
     
+    # 📥 SYSTEMATISK JUSTERING: Släpp på totalt 2-3 Non-Stock pallar utspritt över dagen
+    if st.session_state.sim_minutes in [480, 720] and st.session_state.totalt_inkommande_non < 3:
+        st.session_state.db_data["inbound_non_stock"] += 1
+        st.session_state.totalt_inkommande_non += 1
+    
+    # Processa inleveranser med de dedikerade personerna
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0:
         st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - 1)
         st.session_state.db_data["putaway_stock"] += random.randint(14, 24)
