@@ -653,9 +653,9 @@ st.info(
     f"ledtider ökar skiftets nettoresultat med i snitt **14.2%** genom minskad spilltid på golvet."
 )
 
-# 🕒 SIMULERINGSHASTIGHET (Bromsar klockan till exakt 10 sekunder per steg)
+# 🕒 SIMULERINGSHASTIGHET (Bromsar klockan till exakt 5 sekunder per steg)
 if live_sim:
-    time.sleep(10)
+    time.sleep(5)
     st.rerun()
 
 
