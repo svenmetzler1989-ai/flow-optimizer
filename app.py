@@ -31,12 +31,11 @@ st.title("🟩 Specsavers WMS Flow Optimizer")
 st.subheader("AI-Driven Driftstyrning & Resursallokering i Real-Time")
 
 
-
 # =====================================================================
-# 2. STARTPARAMETRAR OCH VOLYMER (Nu startar vi på vinstgivande 10 000)
+# 2. STARTPARAMETRAR OCH VOLYMER (6 PALL STOCK & 1 PALL NON-STOCK)
 # =====================================================================
-START_INBOUND_STOCK = 15      # Pallar på kajen
-START_INBOUND_NON = 5         # Non-stock pallar
+START_INBOUND_STOCK = 6       # ⚡ JUSTERAT: Startar på 6 pallar på kajen
+START_INBOUND_NON = 1         # ⚡ JUSTERAT: Startar på 1 pall på kajen
 START_PUTAWAY_STOCK = 120     # Kartonger som väntar på inlagring
 START_PUTAWAY_NON = 40        # Non-stock enheter
 START_PICK_STOCK = 10000      # Startar på 10 000 rader för att simulera vinstbrytpunkten
@@ -51,7 +50,7 @@ def fetch_live_data():
         "inbound_non_stock": START_INBOUND_NON,
         "putaway_stock": START_PUTAWAY_STOCK,
         "putaway_non_stock": START_PUTAWAY_NON,
-        "queue_pick_stock": START_PICK_STOCK,       # 10 000 rader
+        "queue_pick_stock": START_PICK_STOCK,       
         "queue_pick_non_stock": START_PICK_NON,
         "queue_pack": START_PACK
     }
@@ -157,7 +156,7 @@ st.sidebar.markdown(f"📦 **Packbords-linje:** `{p_pack} pers` (Max 11 bord)")
 
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK (STRIKTA MAX-GRÄNSER FÖR RETURER OCH NON-STOCK)
+# 6. SIMULERINGSLOGIK (DEDIKERADE PERSONER FÖR INBOUND -> PUTAWAY)
 # =====================================================================
 if "just_clicked" not in st.session_state:
     st.session_state.just_clicked = False
@@ -172,7 +171,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
     else:
         st.session_state.sim_minutes += 10  
     
-    # --- DYNAMISK AI-AUTOPILOT: SMART RESURSREGLERING MED NYA GRÄNSER ---
+    # --- DYNAMISK AI-AUTOPILOT: SMART RESURSREGLERING ---
     current_placering = st.session_state.placering
     all_emps = list(st.session_state.medarbetare_info.keys())
     
@@ -181,23 +180,27 @@ if live_sim and st.session_state.sim_minutes < 1380:
     rörlig_personal_pool = []
     
     for emp in all_emps:
-        # A. 📥 INBOUND-REGLERING (Max 2 personer totalt, styrs helt av volym)
-        if st.session_state.db_data["inbound_stock"] >= 15 and get_count("Inbound Stock") < 2:
+        # 🏢 REGLER FÖR STOCK-KEDJAN (Max 1 person totalt för detta flöde)
+        # Om det finns pallar på kajen, jobba på Inbound Stock
+        if st.session_state.db_data["inbound_stock"] > 0 and get_count("Inbound Stock") < 1:
             st.session_state.placering[emp] = "Inbound Stock"
             continue
-        elif st.session_state.db_data["inbound_non_stock"] > 0 and get_count("Inbound Non-Stock") < 1 and get_count("Inbound Stock") < 2:
-            st.session_state.placering[emp] = "Inbound Non-Stock"
-            continue
-
-        # B. PUTAWAY-REGLERING (Max 2 personer baserat på volym)
-        elif st.session_state.db_data["putaway_stock"] > 0 and get_count("Putaway Stock") < 2:
+        # Om Inbound Stock är tomt men det finns kartonger på hyllan, flytta samma person till Putaway Stock
+        elif st.session_state.db_data["inbound_stock"] == 0 and st.session_state.db_data["putaway_stock"] > 0 and get_count("Putaway Stock") < 1:
             st.session_state.placering[emp] = "Putaway Stock"
             continue
-        elif st.session_state.db_data["putaway_non_stock"] > 0 and get_count("Putaway Non-Stock") < 2:
+
+        # 🟢 REGLER FÖR NON-STOCK-KEDJAN (Max 1 person totalt för detta flöde)
+        # Om det finns pallar på kajen, jobba på Inbound Non-Stock
+        elif st.session_state.db_data["inbound_non_stock"] > 0 and get_count("Inbound Non-Stock") < 1:
+            st.session_state.placering[emp] = "Inbound Non-Stock"
+            continue
+        # Om Inbound Non-Stock är tomt men det finns enheter kvar, flytta samma person till Putaway Non-Stock
+        elif st.session_state.db_data["inbound_non_stock"] == 0 and st.session_state.db_data["putaway_non_stock"] > 0 and get_count("Putaway Non-Stock") < 1:
             st.session_state.placering[emp] = "Putaway Non-Stock"
             continue
 
-        # C. 🛒 PLOCK NON-STOCK REGLERING (Max 2 personer baserat på volym)
+        # C. SPECIALFLÖDE: PLOCK NON-STOCK (Sätt max 2 personer baserat på volym)
         elif st.session_state.db_data["queue_pick_non_stock"] > 0 and get_count("Plock Non-Stock") < 2:
             st.session_state.placering[emp] = "Plock Non-Stock"
             continue
@@ -214,7 +217,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
                 st.session_state.placering[emp] = "Transport"
                 continue
 
-        # E. 🛑 RETUR-REGLERING EFTER KL 14:30 (Max 1 person vid registrerad avvikelse)
+        # E. RETUR-REGLERING EFTER KL 14:30 (Max 1 person vid registrerad avvikelse)
         if st.session_state.sim_minutes > 870 and current_placering[emp] in ["Transport", "Utlastning", "Sortering"]:
             if st.session_state.retur_notis and get_count("Returer") < 1:
                 st.session_state.placering[emp] = "Returer"
@@ -222,7 +225,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
             else:
                 st.session_state.placering[emp] = "Plock Stock"
 
-        # F. ÅTERSTRÖMNING: Om en kö blir helt tom (0), återställ personen till kärnflödet direkt
+        # F. ÅTERSTRÖMNING: Om hela kedjan blir helt tom (0), återställ personen till kärnflödet
         if current_placering[emp] == "Inbound Stock" and st.session_state.db_data["inbound_stock"] == 0:
             current_placering[emp] = "Plock Stock"
         if current_placering[emp] == "Inbound Non-Stock" and st.session_state.db_data["inbound_non_stock"] == 0:
@@ -298,7 +301,6 @@ if live_sim and st.session_state.sim_minutes < 1380:
 
     if random.random() > 0.98 and not st.session_state.retur_notis:
         st.session_state.retur_notis = True
-
 
 
 # =====================================================================
