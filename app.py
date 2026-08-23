@@ -118,7 +118,7 @@ if st.sidebar.button("🔄 Återställ Skiftet till 06:00"):
 
 
 # =====================================================================
-# 5. REALTIDSBERÄKNING AV GRUPPKAPACITET
+# 5. REALTIDSBERÄKNING AV GRUPPKAPACITET (KORRIGERAD TILL 10-MIN TEMPO)
 # =====================================================================
 p_in_stock = list(st.session_state.placering.values()).count("Inbound Stock")
 p_in_non = list(st.session_state.placering.values()).count("Inbound Non-Stock")
@@ -128,14 +128,23 @@ p_pick_stock = list(st.session_state.placering.values()).count("Plock Stock")
 p_pick_non = list(st.session_state.placering.values()).count("Plock Non-Stock")
 p_pack = list(st.session_state.placering.values()).count("Packning")
 
-# Summera ihop live-kapaciteter per timme utifrån personalens placeringar
-total_in_stock_speed = p_in_stock * 1.7
-total_in_non_speed = p_in_non * 1.7
-total_put_stock_speed = sum([st.session_state.medarbetare_info[eid]["putaway_speed"] for eid, loc in st.session_state.placering.items() if loc == "Putaway Stock"]) / 80
-total_put_non_speed = sum([st.session_state.medarbetare_info[eid]["putaway_speed"] for eid, loc in st.session_state.placering.items() if loc == "Putaway Non-Stock"]) / 80
-total_pick_stock_speed = sum([st.session_state.medarbetare_info[eid]["pick_speed"] for eid, loc in st.session_state.placering.items() if loc == "Plock Stock"])
-total_pick_non_speed = sum([st.session_state.medarbetare_info[eid]["pick_speed"] for eid, loc in st.session_state.placering.items() if loc == "Plock Non-Stock"])
-total_pack_speed = sum([st.session_state.medarbetare_info[eid]["pack_speed"] for eid, loc in st.session_state.placering.items() if loc == "Packning"])
+# 1. Berätta kapacitet per timme (för visning i menyerna)
+total_in_stock_speed_h = p_in_stock * 1.7
+total_in_non_speed_h = p_in_non * 1.7
+total_put_stock_speed_h = sum([st.session_state.medarbetare_info[eid]["putaway_speed"] for eid, loc in st.session_state.placering.items() if loc == "Putaway Stock"])
+total_put_non_speed_h = sum([st.session_state.medarbetare_info[eid]["putaway_speed"] for eid, loc in st.session_state.placering.items() if loc == "Putaway Non-Stock"])
+total_pick_stock_speed_h = sum([st.session_state.medarbetare_info[eid]["pick_speed"] for eid, loc in st.session_state.placering.items() if loc == "Plock Stock"])
+total_pick_non_speed_h = sum([st.session_state.medarbetare_info[eid]["pick_speed"] for eid, loc in st.session_state.placering.items() if loc == "Plock Non-Stock"])
+total_pack_speed_h = sum([st.session_state.medarbetare_info[eid]["pack_speed"] for eid, loc in st.session_state.placering.items() if loc == "Packning"])
+
+# 2. ⚖️ MATEMATISK BUGGFIX: Räkna ut exakt vad gruppen hinner på 10 MINUTER (Dela med 6)
+step_in_stock = total_in_stock_speed_h / 6.0
+step_in_non = total_in_non_speed_h / 6.0
+step_put_stock = total_put_stock_speed_h / 6.0
+step_put_non = total_put_non_speed_h / 6.0
+step_pick_stock = total_pick_stock_speed_h / 6.0
+step_pick_non = total_pick_non_speed_h / 6.0
+step_pack = total_pack_speed_h / 6.0
 
 # Skriv ut bemanningsöversikten i sidopanelen
 st.sidebar.markdown("---")
@@ -148,7 +157,7 @@ st.sidebar.markdown(f"📦 **Packbords-linje:** `{p_pack} pers` (Max 11 bord)")
 
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK (STRIKT 50/50 BAS-BALANS OCH DYNAMISK STÖTTNING)
+# 6. SIMULERINGSLOGIK (PERFEKT TIMING OCH EXAKT ÖVERFÖRING PLOCK -> PACK)
 # =====================================================================
 if "just_clicked" not in st.session_state:
     st.session_state.just_clicked = False
@@ -169,7 +178,6 @@ if live_sim and st.session_state.sim_minutes < 1380:
     
     def get_count(zon): return list(st.session_state.placering.values()).count(zon)
     
-    # Lista på de medarbetare som är tillgängliga för den rörliga kärnan (Plock & Pack)
     rörlig_personal_pool = []
     
     for emp in all_emps:
@@ -202,80 +210,70 @@ if live_sim and st.session_state.sim_minutes < 1380:
         # C. ÅTERSTRÖMNING: Om Non-Stock eller Transportzonerna är stängda/tomma, frigör personalen
         if current_placering[emp] in ["Inbound Non-Stock", "Putaway Non-Stock", "Plock Non-Stock", "Transport", "Utlastning"]:
             if st.session_state.sim_minutes > 870 or st.session_state.db_data["queue_pick_non_stock"] == 0:
-                current_placering[emp] = "Plock Stock" # Sätt tillfälligt till basen
+                current_placering[emp] = "Plock Stock"
 
-        # Sparar medarbetaren i poolen för kärnflödet om denne inte plockades upp av villkoren ovan
         if current_placering[emp] in ["Plock Stock", "Packning"]:
             rörlig_personal_pool.append(emp)
 
     # ⚖️ REGLERINGSMOTORN (Styr basen 50/50 och parerar flaskhalsar live)
     total_kärna = len(rörlig_personal_pool)
     if total_kärna > 0:
-        # Räkna ut det ideala antalet packare utifrån nuläget i köerna
-        if st.session_state.db_data["queue_pack"] > 500:
-            # Akut tryck vid packborden: Tryck in max tillgängliga resurser till packlinjen (upp till taket på 11)
-            mål_packare = min(11, int(total_kärna * 0.75))
-        elif st.session_state.db_data["queue_pack"] < 150:
-            # Packborden har kommit ikapp: Skicka tillbaka stöttningen för att mata på med mer plock
-            mål_packare = max(2, int(total_kärna * 0.35))
+        if st.session_state.db_data["queue_pack"] > 400:
+            mål_packare = min(11, int(total_kärna * 0.70))
+        elif st.session_state.db_data["queue_pack"] < 100:
+            mål_packare = max(2, int(total_kärna * 0.30))
         else:
-            # Stabil drift: Håll en knivskarp och helt jämn 50/50-fördelning i kärnan
             mål_packare = int(total_kärna / 2)
 
-        # Tilldela rollerna baserat på det framräknade målet för tidssteget
         for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
             if rörlig_idx < mål_packare:
                 st.session_state.placering[emp_id] = "Packning"
             else:
                 st.session_state.placering[emp_id] = "Plock Stock"
 
-    # --- BERÄKNA PRODUKTION LIVE PER 10 MINUTER ---
-    if st.session_state.db_data["queue_pick_stock"] > 0:
-        plockat_stock = int(total_pick_stock_speed / live_sim_speed)
-        plockat_stock = min(plockat_stock, st.session_state.db_data["queue_pick_stock"])
-    else:
-        plockat_stock = 0
+    # --- BERÄKNA PRODUKTION LIVE UTIFRÅN 10-MINUTERS TEMPO ---
+    # Räkna ut exakt antal rader plockat i detta steg (avrundat till heltal för rena köer)
+    plockat_stock = int(min(step_pick_stock, st.session_state.db_data["queue_pick_stock"]))
+    plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
+    
+    # Räkna ut exakt pack- och inlagringskapacitet för detta steg
+    packat = int(min(step_pack, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
+    inlagrat_stock = int(min(step_put_stock * 4, st.session_state.db_data["putaway_stock"]))
+    inlagrat_non = int(min(step_put_non * 4, st.session_state.db_data["putaway_non_stock"]))
 
-    if st.session_state.db_data["queue_pick_non_stock"] > 0:
-        plockat_non = int(total_pick_non_speed / live_sim_speed)
-        plockat_non = min(plockat_non, st.session_state.db_data["queue_pick_non_stock"])
-    else:
-        plockat_non = 0
-
-    packat = int(total_pack_speed / live_sim_speed)
-    inlagrat_stock = int((total_put_stock_speed / live_sim_speed) * 4) 
-    inlagrat_non = int((total_put_non_speed / live_sim_speed) * 4)
-
-    # Verkställ produktionen direkt i köerna
+    # 🛠️ EXAKT ENHETS-FIX: Minska plockköerna korrekt
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
     
-    nypackat_mängd = (plockat_stock + plockat_non)
+    # 🛠️ FLÖDES-FIX: ALLT plockat material (100 %) landar i packkön direkt
+    total_nyplockat = plockat_stock + plockat_non
+    
     if st.session_state.sim_minutes <= 870:
-        st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + nypackat_mängd - packat)
+        # Före 14:30: Packas löpande, resten stannar i kön
+        st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_nyplockat - packat)
     else:
-        st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + nypackat_mängd)
+        # Efter 14:30: Lastbilen har gått, all nypackning rullas över till morgondagen
+        st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_nyplockat)
         st.session_state.morgondagens_pack += packat
 
+    # Minska inlagringen på hyllorna
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # Inkommande gods under dagen
-    if st.session_state.sim_minutes <= 885:
-        if random.random() > 0.95:
-            st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
+    # Inbound-pallar betas av på kajen (Varje avklarat steg minskar med 10-min tempot)
+    if st.session_state.sim_minutes <= 885 and random.random() > 0.95:
+        st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
     
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
-        st.session_state.db_data["inbound_stock"] -= 1
+        st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - 1)
         st.session_state.db_data["putaway_stock"] += random.randint(14, 24)
 
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
-        st.session_state.db_data["inbound_non_stock"] -= 1
+        st.session_state.db_data["inbound_non_stock"] = max(0, st.session_state.db_data["inbound_non_stock"] - 1)
         st.session_state.db_data["putaway_non_stock"] += random.randint(10, 15)
 
     if random.random() > 0.98 and not st.session_state.retur_notis:
         st.session_state.retur_notis = True
-
 
 
 # =====================================================================
