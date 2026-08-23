@@ -169,11 +169,12 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & SCHEMALAGD UTLASTNING
+# 6. SIMULERINGSLOGIK (BUGGFIXAD: PUTAWAY MINSKAR & KLOCKEDRIV SÄKRAD)
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
     
+    # ⚙️ Beräkna plockkapacitet live baserat på köer
     if st.session_state.db_data["queue_pick_stock"] > 0:
         plockat_stock = int(total_pick_stock_speed / live_sim_speed)
         plockat_stock = min(plockat_stock, st.session_state.db_data["queue_pick_stock"])
@@ -186,28 +187,32 @@ if live_sim and st.session_state.sim_minutes < 1380:
     else:
         plockat_non = 0
 
+    # Beräkna packning och inlagringshastighet live per 10 minuter
     packat = int(total_pack_speed / live_sim_speed)
     inlagrat_stock = int(total_put_stock_speed / live_sim_speed)
     inlagrat_non = int(total_put_non_speed / live_sim_speed)
 
-    # Skapa en session-state för morgondagens saldo om den saknas
+    # Initiera morgondagens saldo om det saknas i sessionen
     if "morgondagens_pack" not in st.session_state:
         st.session_state.morgondagens_pack = 0
     if "retur_notis" not in st.session_state:
         st.session_state.retur_notis = False
 
-    # 📦 REGEL: Efter kl 14:30 (870 min) slussas allt nypackat till nästa dags bil
+    # 🛒 Uppdatera plock och pack-köer (Hård transportgräns 14:30)
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     
     nypackat_mängd = (plockat_stock + plockat_non)
     if st.session_state.sim_minutes <= 870:
         st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + nypackat_mängd - packat)
     else:
-        # Efter 14:30 minskar inte den aktuella dagens packkö mer till transporten, utan rullar över på nästa dag
         st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + nypackat_mängd)
         st.session_state.morgondagens_pack += packat
 
-    # 🚚 REGEL: Simulerat inflöde till Inbound sker ENDAST fram till kl 14:45
+    # 🛠️ BUGGFIX: Här uppdateras och sparas Putaway-köerna korrekt i databas-statet!
+    st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
+    st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
+
+    # 🚚 Simulerat inflöde till Inbound sker ENDAST fram till kl 14:45
     if st.session_state.sim_minutes <= 885:
         if random.random() > 0.95:
             st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
@@ -215,19 +220,21 @@ if live_sim and st.session_state.sim_minutes < 1380:
     elif st.session_state.sim_minutes == 890:
         st.toast("🛑 Klockan är efter 14:45. Inleveransen är stängd för dagen!", icon="🔒")
 
-    # 🔄 REGEL: Slumpmässiga returer (1-2% risk per tidssteg)
+    # 🔄 Slumpmässiga returer (1-2% risk per tidssteg)
     if random.random() > 0.98 and not st.session_state.retur_notis:
         st.session_state.retur_notis = True
 
+    # Inbound Stock betas av och flyttas till Putaway-kön
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
         st.session_state.db_data["inbound_stock"] -= 1
         st.session_state.db_data["putaway_stock"] += 20  
 
+    # Inbound Non-Stock betas av och flyttas till Putaway Non-Stock-kön
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
-    # AUTOMATISK KRISHANTERING
+    # AUTOMATISK KRISHANTERING (Garanterar max 11 packare vid tomma köer)
     plock_klart = (st.session_state.db_data["queue_pick_stock"] == 0 and st.session_state.db_data["queue_pick_non_stock"] == 0)
     inbound_klart = (st.session_state.db_data["inbound_stock"] == 0 and st.session_state.db_data["inbound_non_stock"] == 0)
 
@@ -246,17 +253,17 @@ if live_sim and st.session_state.sim_minutes < 1380:
         if omplacerade > 0:
             st.toast("⚡ Flödesräddning aktiverad: Maximerar packningen till 11 stationer!", icon="🛡️")
 
+    # Lagerkedja för Non-Stock plock
     if inlagrat_non > 0 and st.session_state.db_data["putaway_non_stock"] > 0:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non + int(inlagrat_non * 0.8))
     else:
-        st.session_state.db_data["queue_pick_non_stock"] = max(0, max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non))
+        st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
 
 # =====================================================================
-# 6B. AI FLÖDESASSISTENT (BESLUTSSTÖD & RETUR-POPUPS - BUGGFIXAD)
+# 6B. AI FLÖDESASSISTENT (BUGGSÄKRAD RETURHANTERING)
 # =====================================================================
 st.markdown("### 🚦 AI Flödesassistent (Beslutsstöd)")
 
-# 🛠️ SÄKERHETSKONTROLL: Initiera retur_notis om den saknas i minnet
 if "retur_notis" not in st.session_state:
     st.session_state.retur_notis = False
 
@@ -264,12 +271,23 @@ def flytta_en_person(fran_zon, till_zon):
     if till_zon == "Packning" and p_pack >= 11:
         st.error("⚠️ **KAPACITETSSTOPP:** Max 11 packbord tillgängliga per skift!")
         return
+    
+    # 🛠️ BUGGFIX: Kolla först om det faktiskt finns NÅGON på den angivna zonen överhuvudtaget!
+    zon_finns = any(lok == fran_zon for lok in st.session_state.placering.values())
+    
+    if not zon_finns:
+        # Om zonen är tom, ta istället första bästa person från Plock Stock för att undvika oändlig loop-krasch
+        fran_zon = "Plock Stock"
+
     for emp, lokation in st.session_state.placering.items():
         if lokation == fran_zon:
             st.session_state.placering[emp] = till_zon
             st.toast(f"🏃 {st.session_state.medarbetare_info[emp]['namn']} omstyrd till {till_zon}!", icon="✅")
             st.rerun()
-            break
+            return
+    
+    # Om ingen alls kunde flyttas, ladda bara om sidan säkert utan tidshopp
+    st.rerun()
 
 # 🚨 POPUP: Visar om en retur anlänt till terminalen
 if st.session_state.retur_notis:
@@ -277,6 +295,7 @@ if st.session_state.retur_notis:
     st.markdown("En ny retursändning (avvikelse 1-2%) har registrerats på kajen och blockerar terminalytan.")
     if st.button("📥 Godkänn: Flytta 1 ledig medarbetare till Returhantering", key="move_to_returns_btn"):
         st.session_state.retur_notis = False
+        # Säkrad flytt: systemet tar en person och styr om till returer utan att klockan skenar
         flytta_en_person("Putaway Stock", "Returer")
 
 # Tidsspärr-varning för transporten efter kl 14:30
