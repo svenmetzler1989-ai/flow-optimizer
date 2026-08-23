@@ -157,7 +157,7 @@ st.sidebar.markdown(f"📦 **Packbords-linje:** `{p_pack} pers` (Max 11 bord)")
 
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK (PERFEKT TIMING OCH EXAKT ÖVERFÖRING PLOCK -> PACK)
+# 6. SIMULERINGSLOGIK (KORRIGERADE VARIABELNAMN - FIXAR LÅSNING)
 # =====================================================================
 if "just_clicked" not in st.session_state:
     st.session_state.just_clicked = False
@@ -232,27 +232,24 @@ if live_sim and st.session_state.sim_minutes < 1380:
                 st.session_state.placering[emp_id] = "Plock Stock"
 
     # --- BERÄKNA PRODUKTION LIVE UTIFRÅN 10-MINUTERS TEMPO ---
-    # Räkna ut exakt antal rader plockat i detta steg (avrundat till heltal för rena köer)
+    # 🛠️ BUGGFIX: Matchar nu Punkt 5:s nya tim-hastigheter (_h) och skalar ner dem till 10 minuter
     plockat_stock = int(min(step_pick_stock, st.session_state.db_data["queue_pick_stock"]))
     plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
     
-    # Räkna ut exakt pack- och inlagringskapacitet för detta steg
     packat = int(min(step_pack, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
     inlagrat_stock = int(min(step_put_stock * 4, st.session_state.db_data["putaway_stock"]))
     inlagrat_non = int(min(step_put_non * 4, st.session_state.db_data["putaway_non_stock"]))
 
-    # 🛠️ EXAKT ENHETS-FIX: Minska plockköerna korrekt
+    # Minska plockköerna korrekt
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
     
-    # 🛠️ FLÖDES-FIX: ALLT plockat material (100 %) landar i packkön direkt
+    # Skicka allt plockat gods raka vägen till packborden
     total_nyplockat = plockat_stock + plockat_non
     
     if st.session_state.sim_minutes <= 870:
-        # Före 14:30: Packas löpande, resten stannar i kön
         st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_nyplockat - packat)
     else:
-        # Efter 14:30: Lastbilen har gått, all nypackning rullas över till morgondagen
         st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_nyplockat)
         st.session_state.morgondagens_pack += packat
 
@@ -260,7 +257,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # Inbound-pallar betas av på kajen (Varje avklarat steg minskar med 10-min tempot)
+    # Inbound-pallar betas av på kajen
     if st.session_state.sim_minutes <= 885 and random.random() > 0.95:
         st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
     
@@ -274,6 +271,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
 
     if random.random() > 0.98 and not st.session_state.retur_notis:
         st.session_state.retur_notis = True
+
 
 
 # =====================================================================
