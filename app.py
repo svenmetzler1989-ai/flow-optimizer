@@ -169,12 +169,11 @@ if st.sidebar.button("🔄 Återställ klockan till 06:00"):
     st.rerun()
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK MED AUTOMATISK LAGERKEDJA & AUTOMATISK KRISHANTERING
+# 6. SIMULERINGSLOGIK (ANPASSAD TILL 30 SEKUNDER PER HOPP)
 # =====================================================================
 if live_sim and st.session_state.sim_minutes < 1380:
     st.session_state.sim_minutes += 10
     
-    # ⚙️ BUGGFIX: Räkna bara ut plockat antal om det faktiskt finns något kvar i plockköerna!
     if st.session_state.db_data["queue_pick_stock"] > 0:
         plockat_stock = int(total_pick_stock_speed / live_sim_speed)
         plockat_stock = min(plockat_stock, st.session_state.db_data["queue_pick_stock"])
@@ -187,18 +186,16 @@ if live_sim and st.session_state.sim_minutes < 1380:
     else:
         plockat_non = 0
 
-    # Packning och inlagring rullar på baserat på kapacitet
     packat = int(total_pack_speed / live_sim_speed)
     inlagrat_stock = int(total_put_stock_speed / live_sim_speed)
     inlagrat_non = int(total_put_non_speed / live_sim_speed)
 
-    # Uppdatera databasvärdena för köerna live
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + (plockat_stock + plockat_non) - packat)
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # 🚚 REGEL: Simulerat inflöde sker ENDAST fram till kl 14:45
+    # Inleveransstopp kl 14:45
     if st.session_state.sim_minutes <= 885:
         if random.random() > 0.95:
             st.session_state.db_data["inbound_stock"] += random.randint(1, 3)
@@ -206,17 +203,15 @@ if live_sim and st.session_state.sim_minutes < 1380:
     elif st.session_state.sim_minutes == 890:
         st.toast("🛑 Klockan är efter 14:45. Inleveransen är stängd för dagen!", icon="🔒")
 
-    # LAGERKEDJA: Inbound Stock betas av
     if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0 and random.random() > 0.7:
         st.session_state.db_data["inbound_stock"] -= 1
         st.session_state.db_data["putaway_stock"] += 20  
 
-    # LAGERKEDJA: Inbound Non-Stock betas av
     if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0 and random.random() > 0.5:
         st.session_state.db_data["inbound_non_stock"] -= 1
         st.session_state.db_data["putaway_non_stock"] += 10
 
-    # 🚨 AUTOMATISK KRISHANTERING (Garanterar 11 packare & 4 inlagrare när köer töms)
+    # AUTOMATISK KRISHANTERING
     plock_klart = (st.session_state.db_data["queue_pick_stock"] == 0 and st.session_state.db_data["queue_pick_non_stock"] == 0)
     inbound_klart = (st.session_state.db_data["inbound_stock"] == 0 and st.session_state.db_data["inbound_non_stock"] == 0)
 
@@ -324,10 +319,9 @@ col_n4.empty()
 st.markdown("---")
 
 # =====================================================================
-# 9. UPPDATERAD MEDARBETARHANTERING (Heltäckande End-to-End Layout)
+# 9. UPPDATERAD MEDARBETARHANTERING (Breda, lättlästa kolumner)
 # =====================================================================
 with st.expander("🔍 Hantera och ställ om de 15 medarbetarna per uppdrag (Klicka för att öppna)", expanded=False):
-    # Alla 11 unika zoner i flödeskedjan samlade på ett ställe
     ROLLER = [
         "Inbound Stock", "Inbound Non-Stock", 
         "Putaway Stock", "Putaway Non-Stock", 
@@ -338,10 +332,10 @@ with st.expander("🔍 Hantera och ställ om de 15 medarbetarna per uppdrag (Kli
     
     st.markdown("### 👥 Fördela resurser per arbetsstation")
     
-    # Skapa kolumner dynamiskt på skärmen för en ren översikt
-    zon_cols = st.columns(len(ROLLER))
+    # Skapar 3 breda kolumner istället för 11 smala för att texten ska synas perfekt!
+    col_group1, col_group2, col_group3 = st.columns(3)
     
-    # Räkna ut medlemmar per zon
+    # Sortera medlemmar per zon
     zon_medlemmar = {zon: [] for zon in ROLLER}
     for emp_id in emp_list:
         nuvarande_zon = st.session_state.placering.get(emp_id, "Plock Stock")
@@ -350,48 +344,83 @@ with st.expander("🔍 Hantera och ställ om de 15 medarbetarna per uppdrag (Kli
         else:
             st.session_state.placering[emp_id] = "Plock Stock"
             zon_medlemmar["Plock Stock"].append(emp_id)
-        
-    # Rita ut rullistorna kolumn för kolumn
-    for i, zon_namn in enumerate(ROLLER):
-        with zon_cols[i]:
+
+    # BLOCK 1: INBOUND & INLAGRING
+    with col_group1:
+        st.markdown("### 📥 Inbound & Inlagring")
+        for zon_namn in ["Inbound Stock", "Inbound Non-Stock", "Putaway Stock", "Putaway Non-Stock"]:
             st.markdown(f"**{zon_namn}**")
-            
-            # Visa max-gränser och kapacitets-tak direkt i rubriken
             if zon_namn == "Inbound Stock": st.caption("Max 2 pers")
             elif zon_namn == "Inbound Non-Stock": st.caption("Max 1 pers")
-            elif zon_namn == "Packning": st.caption("Max 11 bord")
-            elif zon_namn == "Utlastning": st.caption("Max 2 pers")
-            elif zon_namn == "Transport": st.caption("Max 1 pers")
-            else: st.caption(f"{len(zon_medlemmar[zon_namn])} pers")
+            else: st.caption(f"Aktuellt: {len(zon_medlemmar[zon_namn])} pers")
             
             if zon_medlemmar[zon_namn]:
                 for emp_id in zon_medlemmar[zon_namn]:
                     info = st.session_state.medarbetare_info[emp_id]
-                    
-                    valt = st.selectbox(
-                        f"👤 {info['namn']}", 
-                        ROLLER, 
-                        index=ROLLER.index(zon_namn), 
-                        key=f"grp_sel_{emp_id}"
-                    )
-                    
-                    # Kontrollera de hårda reglerna vid varje flytt-försök
+                    valt = st.selectbox(f"👤 {info['namn']}", ROLLER, index=ROLLER.index(zon_namn), key=f"grp_sel_{emp_id}")
                     if valt != zon_namn:
-                        if valt == "Inbound Stock" and p_in_stock >= 2:
-                            st.error("Stopp! Max 2 på Inbound Stock.")
-                        elif valt == "Inbound Non-Stock" and p_in_non >= 1:
-                            st.error("Stopp! Max 1 på Inbound Non-Stock.")
-                        elif valt == "Packning" and p_pack >= 11:
-                            st.error("Stopp! Max 11 på Packning.")
-                        elif valt == "Utlastning" and list(st.session_state.placering.values()).count("Utlastning") >= 2:
-                            st.error("Stopp! Max 2 på Utlastning.")
-                        elif valt == "Transport" and list(st.session_state.placering.values()).count("Transport") >= 1:
-                            st.error("Stopp! Max 1 på Transport.")
+                        if valt == "Inbound Stock" and p_in_stock >= 2: st.error("Stopp! Max 2 på Inbound Stock.")
+                        elif valt == "Inbound Non-Stock" and p_in_non >= 1: st.error("Stopp! Max 1 på Inbound Non-Stock.")
+                        elif valt == "Packning" and p_pack >= 11: st.error("Stopp! Max 11 på Packning.")
+                        elif valt == "Utlastning" and list(st.session_state.placering.values()).count("Utlastning") >= 2: st.error("Stopp! Max 2 på Utlastning.")
+                        elif valt == "Transport" and list(st.session_state.placering.values()).count("Transport") >= 1: st.error("Stopp! Max 1 på Transport.")
                         else:
                             st.session_state.placering[emp_id] = valt
                             st.rerun()
             else:
-                st.info("Tom")
+                st.caption("Ingen personal på stationen")
+            st.markdown("")
+
+    # BLOCK 2: PLOCK & PACK
+    with col_group2:
+        st.markdown("### 🛒 Plock & Packning")
+        for zon_namn in ["Plock Stock", "Plock Non-Stock", "Packning"]:
+            st.markdown(f"**{zon_namn}**")
+            if zon_namn == "Packning": st.caption("Max 11 bord")
+            else: st.caption(f"Aktuellt: {len(zon_medlemmar[zon_namn])} pers")
+            
+            if zon_medlemmar[zon_namn]:
+                for emp_id in zon_medlemmar[zon_namn]:
+                    info = st.session_state.medarbetare_info[emp_id]
+                    valt = st.selectbox(f"👤 {info['namn']}", ROLLER, index=ROLLER.index(zon_namn), key=f"grp_sel_{emp_id}")
+                    if valt != zon_namn:
+                        if valt == "Inbound Stock" and p_in_stock >= 2: st.error("Stopp! Max 2 på Inbound Stock.")
+                        elif valt == "Inbound Non-Stock" and p_in_non >= 1: st.error("Stopp! Max 1 på Inbound Non-Stock.")
+                        elif valt == "Packning" and p_pack >= 11: st.error("Stopp! Max 11 på Packning.")
+                        elif valt == "Utlastning" and list(st.session_state.placering.values()).count("Utlastning") >= 2: st.error("Stopp! Max 2 på Utlastning.")
+                        elif valt == "Transport" and list(st.session_state.placering.values()).count("Transport") >= 1: st.error("Stopp! Max 1 på Transport.")
+                        else:
+                            st.session_state.placering[emp_id] = valt
+                            st.rerun()
+            else:
+                st.caption("Ingen personal på stationen")
+            st.markdown("")
+
+    # BLOCK 3: UTLASTNING, TRANSPORT & RETUR
+    with col_group3:
+        st.markdown("### 🚛 Sortering & Utlastning")
+        for zon_namn in ["Sortering", "Utlastning", "Transport", "Returer"]:
+            st.markdown(f"**{zon_namn}**")
+            if zon_namn == "Utlastning": st.caption("Max 2 pers")
+            elif zon_namn == "Transport": st.caption("Max 1 pers")
+            else: st.caption(f"Aktuellt: {len(zon_medlemmar[zon_namn])} pers")
+            
+            if zon_medlemmar[zon_namn]:
+                for emp_id in zon_medlemmar[zon_namn]:
+                    info = st.session_state.medarbetare_info[emp_id]
+                    valt = st.selectbox(f"👤 {info['namn']}", ROLLER, index=ROLLER.index(zon_namn), key=f"grp_sel_{emp_id}")
+                    if valt != zon_namn:
+                        if valt == "Inbound Stock" and p_in_stock >= 2: st.error("Stopp! Max 2 på Inbound Stock.")
+                        elif valt == "Inbound Non-Stock" and p_in_non >= 1: st.error("Stopp! Max 1 på Inbound Non-Stock.")
+                        elif valt == "Packning" and p_pack >= 11: st.error("Stopp! Max 11 på Packning.")
+                        elif valt == "Utlastning" and list(st.session_state.placering.values()).count("Utlastning") >= 2: st.error("Stopp! Max 2 på Utlastning.")
+                        elif valt == "Transport" and list(st.session_state.placering.values()).count("Transport") >= 1: st.error("Stopp! Max 1 på Transport.")
+                        else:
+                            st.session_state.placering[emp_id] = valt
+                            st.rerun()
+            else:
+                st.caption("Ingen personal på stationen")
+            st.markdown("")
 
     st.markdown("---")
     st.markdown("### 🔍 Snabbsök medarbetare")
@@ -419,14 +448,11 @@ time_pack = st.session_state.db_data['queue_pack'] / max(total_pack_speed, 0.1)
 
 st.subheader("🧠 Systemdiagnos & AI-Rekommendationer")
 
-# Räkna ut bemanning för de nya zonerna för diagnosens beräkningar
 p_sort = list(st.session_state.placering.values()).count("Sortering")
 p_utlastning = list(st.session_state.placering.values()).count("Utlastning")
 p_transport = list(st.session_state.placering.values()).count("Transport")
 p_retur = list(st.session_state.placering.values()).count("Returer")
-
-# Beräkna live-hastigheter baserat på de nya stegen
-total_sort_speed = p_sort * 150  # 150 paket per person/h
+total_sort_speed = p_sort * 150  
 
 if time_pack > time_pick_stock and st.session_state.db_data['queue_pack'] > 600:
     st.error("🚨 **PRODUKTIONSSTOPP: FLASKHALS VID PACKBORDEN!**")
@@ -515,8 +541,9 @@ col_money1, col_money2 = st.columns(2)
 col_money1.metric("Estimerad effektivitetsvinst (Detta skift)", f"+ {sparade_kronor} kr", delta="Optimerat flöde")
 col_money2.info("💡 **Direktörs-notis:** Genom att proaktivt flytta personal och förhindra att medarbetare står stilla sänks ledtiden till kund med ca 18% och övertidskostnader minimeras.")
 
+# 🕒 SIMULERINGSHASTIGHET (Bromsar klockan till exakt 30 sekunder per steg)
 if live_sim:
-    time.sleep(2)
+    time.sleep(30)
     st.rerun()
 
 
