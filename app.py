@@ -319,14 +319,20 @@ if live_sim and st.session_state.sim_minutes < 1410:
                     st.session_state.placering[emp_id] = "Plock Stock"
 
 
-    # --- BERÄKNA PRODUKTION LIVE UTIFRÅN TEMPO ---
+        # --- BERÄKNA PRODUKTION LIVE UTIFRÅN TEMPO (KALIBRERAT FÖR MÅLGÅNG 22:30-22:45) ---
     if ar_det_rast:
         plockat_stock = plockat_non = packat = inlagrat_stock = inlagrat_non = inventerat_rader = 0
     else:
-        if m <= 855 or (960 <= m < 1290):
-            hastighets_boost = 1.95 
+        # 🛠️ NEDKALIBRERAT TEMPO: Tar bort den höga boosten så att arbetet räcker hela kvällen
+        if m <= 855:
+            # Stark förmiddag fram till utlastningen (kl 14:15)
+            hastighets_boost = 1.30
+        elif 960 <= m < 1350:
+            # Eftermiddag och kväll rullar på i ett jämnt och kontrollerat tempo fram till kl 22:30
+            hastighets_boost = 0.98
         else:
-            hastighets_boost = 1.10
+            # Efter 22:30-22:45 planar det ut helt till skiftets slut
+            hastighets_boost = 0.20
             
         plockat_stock = int(min(step_pick_stock * hastighets_boost, st.session_state.db_data["queue_pick_stock"]))
         plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
@@ -335,6 +341,28 @@ if live_sim and st.session_state.sim_minutes < 1410:
         inlagrat_stock = int(min(step_put_stock * 4, st.session_state.db_data["putaway_stock"]))
         inlagrat_non = int(min(step_put_non * 4, st.session_state.db_data["putaway_non_stock"]))
         inventerat_rader = p_inventering * 5 
+
+    # Verkställ produktionen
+    st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
+    st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
+    
+    total_nyplockat = plockat_stock + plockat_non
+    st.session_state.db_data["queue_pack"] = max(0, st.session_state.db_data["queue_pack"] + total_nyplockat - packat)
+    
+    st.session_state.total_packat_historik += packat
+    st.session_state.inventering_rader_klara += inventerat_rader
+
+    st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
+    st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
+
+    # Inkommande gods under dagen
+    if m <= 1100 and random.random() > 0.93:
+        st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
+    
+    if m in [540, 900] and st.session_state.totalt_inkommande_non < 3:
+        st.session_state.db_data["inbound_non_stock"] += 1
+        st.session_state.totalt_inkommande_non += 1
+ 
 
     # Verkställ produktionen
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
@@ -537,22 +565,24 @@ with col_sh4:
 
 
 # =====================================================================
-# 15. EKONOMISKT UTFALL (OPTIMAL KOMMERSIELL BALANS & REELL VINST)
+# 15. EKONOMISKT UTFALL (UPPDATERAD MED EXAKT 289 KR/H OPERATÖRSLÖN)
 # =====================================================================
 st.markdown("---")
 st.subheader("💰 Skiftets Ekonomiska Utfall (Real-Time P&L)")
 
-# ⚡ FINJUSTERADE TARIFER FÖR ATT GE EN REALISTISK VINST UTAN ENORM FÖRLUST
 PRIS_IN_STOCK = 75.00     
 PRIS_IN_NON = 85.00       
-PRIS_OUT_ORDER = 1.15     # Justerad till 1.15 kr per rad för sund vinsttäckning
-PRIS_PACK_BOX = 3.20      # Justerad till 3.20 kr per paket
+PRIS_OUT_ORDER = 1.15     
+PRIS_PACK_BOX = 3.20      
 PRIS_INVENTERING_RAD = 15.00 
 
-LON_OPERATOR = 325.0     
+# ⚡ KORREKTA LÖNER: 289 kr/h för lagret och 355 kr/h för dig som gruppledare
+LON_OPERATOR = 289.0     
 LON_LEADER = 355.0       
 
 effektiva_timmar = min(16.75, max(0.1, (st.session_state.sim_minutes - 360) / 60.0))
+
+# Räknar ut kostnaden baserat på 14 operatörer och 1 gruppledare (dig)
 kostnad_personal = int((14 * LON_OPERATOR * effektiva_timmar) + (1 * LON_LEADER * effektiva_timmar))
 
 intakt_in_stock = (6 - st.session_state.db_data["inbound_stock"]) * PRIS_IN_STOCK
@@ -568,7 +598,7 @@ col_fin1, col_fin2, col_fin3 = st.columns(3)
 with col_fin1:
     st.metric(label="Löpande Bruttointäkter", value=f"{totala_intakter:,} kr".replace(",", " "), delta="All utförd produktion")
 with col_fin2:
-    st.metric(label="Ackumulerad Operativ Kostnad", value=f"{kostnad_personal:,} kr".replace(",", " "), delta="15 pers på skiftet", delta_color="inverse")
+    st.metric(label="Ackumulerad Operativ Kostnad", value=f"{kostnad_personal:,} kr".replace(",", " "), delta="14 op á 289kr + 1 GL", delta_color="inverse")
 with col_fin3:
     if netto_resultat >= 0:
         st.metric(label="Nettoresultat (Marginal)", value=f"+ {netto_resultat:,} kr".replace(",", " "), delta="🟢 Positivt kassaflöde")
@@ -583,6 +613,7 @@ st.info(
 if live_sim:
     time.sleep(5)
     st.rerun()
+
 
 
 
