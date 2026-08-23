@@ -250,8 +250,8 @@ if live_sim and st.session_state.sim_minutes < 1410:
             st.session_state.placering[emp] = "Putaway Non-Stock"
             continue
 
-        # B. LÖPANDE SORTERING & PALLISERING (Alltid 2-3 personer)
-        mål_sorterare = 3 if st.session_state.db_data["queue_pack"] > 300 else 2
+        # B. 📦 LÖPANDE SORTERING & PALLISERING (Alltid låst till fast bas på MAX 2 personer)
+        mål_sorterare = 2  # Ändrat från 3 till max 2 personer. Övertalig personal stannar på plock/pack!
         if get_count("Sortering") < mål_sorterare:
             st.session_state.placering[emp] = "Sortering"
             continue
