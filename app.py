@@ -157,7 +157,7 @@ st.sidebar.markdown(f"📦 **Packbords-linje:** `{p_pack} pers` (Max 11 bord)")
 
 
 # =====================================================================
-# 6. SIMULERINGSLOGIK (MAX 2 PÅ PUTAWAY OCH 50/50 BALANS I KÄRNAN)
+# 6. SIMULERINGSLOGIK (JUSTERAT PACKTEMPO: MINST 110 PAKET/H PER PERS)
 # =====================================================================
 if "just_clicked" not in st.session_state:
     st.session_state.just_clicked = False
@@ -189,7 +189,7 @@ if live_sim and st.session_state.sim_minutes < 1380:
             st.session_state.placering[emp] = "Inbound Non-Stock"
             continue
 
-        # B. 🛑 PUTAWAY-REGLERING (Max 2 personer baserat på volym, annars 0)
+        # B. PUTAWAY-REGLERING (Max 2 personer baserat på volym, annars 0)
         elif st.session_state.db_data["putaway_stock"] > 0 and get_count("Putaway Stock") < 2:
             st.session_state.placering[emp] = "Putaway Stock"
             continue
@@ -242,13 +242,10 @@ if live_sim and st.session_state.sim_minutes < 1380:
     total_kärna = len(rörlig_personal_pool)
     if total_kärna > 0:
         if st.session_state.db_data["queue_pack"] > 400:
-            # Om packkön växer, ge extra stöttning till packborden (upp till max 11 stationer)
             mål_packare = min(11, int(total_kärna * 0.70))
         elif st.session_state.db_data["queue_pack"] < 100:
-            # Om packborden är tomma, skicka tillbaka stöttningen till plocket
             mål_packare = max(2, int(total_kärna * 0.30))
         else:
-            # Stabil normaldrift: Håll en knivskarp och helt jämn 50/50-fördelning i kärnan
             mål_packare = int(total_kärna / 2)
 
         for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
@@ -261,7 +258,10 @@ if live_sim and st.session_state.sim_minutes < 1380:
     plockat_stock = int(min(step_pick_stock, st.session_state.db_data["queue_pick_stock"]))
     plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
     
-    packat = int(min(step_pack, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
+    # ⚡ JUSTERAT PACKTEMPO: Minst 110 paket/h per anställd -> (p_pack * 110) / 6 per steg
+    step_pack_dynamisk = (p_pack * 110.0) / 6.0
+    packat = int(min(step_pack_dynamisk, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
+    
     inlagrat_stock = int(min(step_put_stock * 4, st.session_state.db_data["putaway_stock"]))
     inlagrat_non = int(min(step_put_non * 4, st.session_state.db_data["putaway_non_stock"]))
 
