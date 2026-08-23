@@ -61,27 +61,27 @@ def fetch_live_data():
 
 
 # =====================================================================
-# 3. MEDARBETARDATABAS (⚡ JUSTERAT SNITTTEMPO TILL 90 RADER/H)
+# 3. MEDARBETARDATABAS (NAMNGIVEN OCH KALIBRERAD FÖR 15 PERSONER)
 # =====================================================================
 if 'medarbetare_info' not in st.session_state:
+    # 👥 Alla 15 unika medarbetare har nu fått sina riktiga namn
     medarbetare_info = {
         "EMP-101": {"namn": "Anna", "pick_speed": 91, "pack_speed": 95, "putaway_speed": 85, "start_zon": "Plock Stock"},
         "EMP-102": {"namn": "Per", "pick_speed": 89, "pack_speed": 105, "putaway_speed": 75, "start_zon": "Packning"},
         "EMP-103": {"namn": "Lars", "pick_speed": 90, "pack_speed": 100, "putaway_speed": 95, "start_zon": "Putaway Stock"},
         "EMP-104": {"namn": "Elin", "pick_speed": 92, "pack_speed": 98, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
         "EMP-105": {"namn": "Mikael", "pick_speed": 88, "pack_speed": 102, "putaway_speed": 70, "start_zon": "Inbound Stock"},
+        "EMP-106": {"namn": "Karin", "pick_speed": 90, "pack_speed": 97, "putaway_speed": 78, "start_zon": "Packning"},
+        "EMP-107": {"namn": "Anders", "pick_speed": 93, "pack_speed": 103, "putaway_speed": 82, "start_zon": "Plock Stock"},
+        "EMP-108": {"namn": "Johan", "pick_speed": 87, "pack_speed": 101, "putaway_speed": 84, "start_zon": "Putaway Stock"},
+        "EMP-109": {"namn": "Sara", "pick_speed": 91, "pack_speed": 104, "putaway_speed": 76, "start_zon": "Plock Non-Stock"},
+        "EMP-110": {"namn": "Nils", "pick_speed": 89, "pack_speed": 96, "putaway_speed": 80, "start_zon": "Plock Stock"},
+        "EMP-111": {"namn": "Emma", "pick_speed": 92, "pack_speed": 102, "putaway_speed": 85, "start_zon": "Packning"},
+        "EMP-112": {"namn": "Sven", "pick_speed": 88, "pack_speed": 99, "putaway_speed": 79, "start_zon": "Plock Stock"},
+        "EMP-113": {"namn": "Maria", "pick_speed": 90, "pack_speed": 105, "putaway_speed": 81, "start_zon": "Packning"},
+        "EMP-114": {"namn": "Olof", "pick_speed": 91, "pack_speed": 98, "putaway_speed": 83, "start_zon": "Plock Stock"},
+        "EMP-115": {"namn": "Linda", "pick_speed": 89, "pack_speed": 100, "putaway_speed": 77, "start_zon": "Plock Stock"}
     }
-    # Skapa resterande 10 medarbetare med ett kontrollerat plocktempo runt 90 rader/h
-    start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Putaway Stock", "Plock Non-Stock"]
-    for i in range(106, 116):
-        emp_id = f"EMP-{i}"
-        medarbetare_info[emp_id] = {
-            "namn": f"Medarbetare {i}",
-            "pick_speed": random.randint(87, 93), # Justerat till ca 90 rader i timmen
-            "pack_speed": random.randint(95, 105),
-            "putaway_speed": random.randint(75, 85),
-            "start_zon": random.choice(start_zoner_pool)
-        }
     st.session_state.medarbetare_info = medarbetare_info
 
 if 'placering' not in st.session_state:
@@ -89,6 +89,23 @@ if 'placering' not in st.session_state:
 
 if 'db_data' not in st.session_state:
     st.session_state.db_data = fetch_live_data()
+
+# Officiell lista över alla tillgängliga zoner i lagerlayouten
+LAGER_ZONER = [
+    "Plock Stock", "Packning", "Inbound Stock", "Inbound Non-Stock", 
+    "Putaway Stock", "Putaway Non-Stock", "Plock Non-Stock", 
+    "Sortering", "Utlastning", "Transport", "Returer", "Inventering", "Städning"
+]
+
+# Sidopanels-meny för manuell omplacering (om användaren vill överstyra AI)
+st.sidebar.markdown("### 🛠️ Manuell Resursstyrning")
+valda_pers = st.sidebar.multiselect("Välj medarbetare att flytta:", list(st.session_state.medarbetare_info.keys()))
+ny_zon = st.sidebar.selectbox("Välj ny station/zon:", LAGER_ZONER)
+if st.sidebar.button("Verkställ manuell flytt"):
+    for vp in valda_pers:
+        st.session_state.placering[vp] = ny_zon
+    st.session_state.just_clicked = True
+    st.sidebar.success(f"Flyttade {len(valda_pers)} personer till {ny_zon}!")
 
 
 # =====================================================================
