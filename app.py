@@ -416,7 +416,7 @@ else:
     st.success("✅ **FLÖDET ÄR OPTIMALT BALANSERAT**")
 
 # =====================================================================
-# 11. PROCESS-PROGNOS (TABELLEN LÄNGST NER - TEXTJUSTERAD)
+# 11. PROCESS-PROGNOS (TABELLEN LÄNGST NER - JUSTERAT PLOCKTEMPO)
 # =====================================================================
 st.markdown("### 📊 Detaljerad tidsprognos för skiftet")
 prognos_data = {
@@ -425,7 +425,7 @@ prognos_data = {
         "Inbound: Non-Stock (35 min/pall)", 
         "Inlagring: Putaway Stock (80 rader/h)", 
         "Inlagring: Putaway Non-Stock (80 rader/h)", 
-        "Plock: Stock (100 order/h snitt)", 
+        "Plock: Stock (50 order/h snitt)", # Justerad text till 50 order/h
         "Packning (110 paket/h snitt)"
     ],
     "Aktuell Bemanning (Antal)": [p_in_stock, p_in_non, p_put_stock, p_put_non, p_pick_stock, p_pack],
@@ -451,4 +451,5 @@ st.table(prognos_data)
 if live_sim:
     time.sleep(2)
     st.rerun()
+
 
