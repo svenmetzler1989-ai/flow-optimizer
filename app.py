@@ -252,9 +252,13 @@ if live_sim and st.session_state.sim_minutes < 1380:
         st.session_state.db_data["queue_pick_non_stock"] = max(0, max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non))
 
 # =====================================================================
-# 6B. AI FLÖDESASSISTENT (BESLUTSSTÖD & RETUR-POPUPS)
+# 6B. AI FLÖDESASSISTENT (BESLUTSSTÖD & RETUR-POPUPS - BUGGFIXAD)
 # =====================================================================
 st.markdown("### 🚦 AI Flödesassistent (Beslutsstöd)")
+
+# 🛠️ SÄKERHETSKONTROLL: Initiera retur_notis om den saknas i minnet
+if "retur_notis" not in st.session_state:
+    st.session_state.retur_notis = False
 
 def flytta_en_person(fran_zon, till_zon):
     if till_zon == "Packning" and p_pack >= 11:
@@ -267,7 +271,7 @@ def flytta_en_person(fran_zon, till_zon):
             st.rerun()
             break
 
-# 🚨 NY POPUP: Visar om en retur anlänt till terminalen
+# 🚨 POPUP: Visar om en retur anlänt till terminalen
 if st.session_state.retur_notis:
     st.warning("⚠️ **AVVIKELSEVARNING: KUNDRETUR HAR ANLÄNT TILL TERMINALEN!**")
     st.markdown("En ny retursändning (avvikelse 1-2%) har registrerats på kajen och blockerar terminalytan.")
@@ -275,7 +279,7 @@ if st.session_state.retur_notis:
         st.session_state.retur_notis = False
         flytta_en_person("Putaway Stock", "Returer")
 
-# Tidsspärr-varning för transporten
+# Tidsspärr-varning för transporten efter kl 14:30
 if st.session_state.sim_minutes > 870:
     st.info("🚛 **TRANSPORTSTÄNGNING:** Dagens huvudbil avgick 14:30. All pågående packning rullas nu över till morgondagens utlastning.")
 elif st.session_state.db_data["inbound_stock"] == 0 and p_in_stock > 0:
