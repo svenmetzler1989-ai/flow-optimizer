@@ -1,11 +1,11 @@
-import streamlit as st  # <-- HÄR ÄR ÄNDRINGEN (Från str till st)
+import streamlit as st
 import pandas as pd
 import numpy as np
 import random
 import time
 
 # =====================================================================
-# 1. KONFIGURATION OCH DESIGN (Specsavers Tema - KORRIGERAD)
+# 1. KONFIGURATION OCH DESIGN (Specsavers Tema - SÄKRAD FÖR NYA STREAMLIT)
 # =====================================================================
 st.set_page_config(
     page_title="Specsavers WMS Flow Optimizer",
@@ -14,8 +14,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS för att anpassa gränssnittet och göra det stilrent
-st.markdown("""
+# 🛠️ BUGGFIX: Använder st.html istället för st.markdown med unsafe_html
+st.html("""
     <style>
     .reportview-container { background: #f0f2f6; }
     .sidebar .sidebar-content { background: #ffffff; }
@@ -25,11 +25,11 @@ st.markdown("""
         border-radius: 6px;
     }
     </style>
-""", unsafe_html=True)
+""")
 
 st.title("🟩 Specsavers WMS Flow Optimizer")
 st.subheader("AI-Driven Driftstyrning & Resursallokering i Real-Time")
-d
+
 
 
 # =====================================================================
