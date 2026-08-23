@@ -382,15 +382,18 @@ with col_diag2:
 
 
 # =====================================================================
-# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET
+# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET (KORRIGERADE VARIABELNAMN)
 # =====================================================================
 p_sort = list(st.session_state.placering.values()).count("Sortering")
 p_utlastning = list(st.session_state.placering.values()).count("Utlastning")
 p_transport = list(st.session_state.placering.values()).count("Transport")
 p_retur = list(st.session_state.placering.values()).count("Returer")
+
 total_sort_speed = p_sort * 150  
-time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(total_pick_stock_speed, 0.1)
-time_pack = st.session_state.db_data['queue_pack'] / max(total_pack_speed, 0.1)
+
+# 🛠️ BUGGFIX: Ändrat till de nya variabelnamnen med _h från Punkt 5
+time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(total_pick_stock_speed_h, 0.1)
+time_pack = st.session_state.db_data['queue_pack'] / max(total_pack_speed_h, 0.1)
 
 st.markdown("---")
 st.markdown("### 📊 Detaljerad tidsprognos för skiftet")
@@ -403,21 +406,22 @@ prognos_data = {
     ],
     "Aktuell Bemanning (Antal)": [p_in_stock, p_in_non, p_put_stock, p_put_non, p_pick_stock, p_pack, p_sort, (p_utlastning + p_transport), p_retur],
     "Total Gruppkapacitet / timme": [
-        f"{round(total_in_stock_speed, 1)} pallar", f"{round(total_in_non_speed, 1)} pallar", 
-        f"{total_put_stock_speed * 4} kartonger", f"{total_put_non_speed * 4} kartonger", 
-        f"{total_pick_stock_speed} rader", f"{total_pack_speed} paket",
+        f"{round(total_in_stock_speed_h, 1)} pallar", f"{round(total_in_non_speed_h, 1)} pallar", 
+        f"{total_put_stock_speed_h * 4} kartonger", f"{total_put_non_speed_h * 4} kartonger", 
+        f"{total_pick_stock_speed_h} rader", f"{total_pack_speed_h} paket",
         f"{total_sort_speed} paket", f"{p_utlastning * 4} pallar", "Löpande"
     ],
     "Tid till tomt (Timmar)": [
-        round(st.session_state.db_data['inbound_stock']/max(total_in_stock_speed,0.1), 1), 
-        round(st.session_state.db_data['inbound_non_stock']/max(total_in_non_speed,0.1), 1), 
-        round(st.session_state.db_data['putaway_stock']/max(total_put_stock_speed * 4, 0.1), 1), 
-        round(st.session_state.db_data['putaway_non_stock']/max(total_put_non_speed * 4, 0.1), 1), 
+        round(st.session_state.db_data['inbound_stock']/max(total_in_stock_speed_h,0.1), 1), 
+        round(st.session_state.db_data['inbound_non_stock']/max(total_in_non_speed_h,0.1), 1), 
+        round(st.session_state.db_data['putaway_stock']/max(total_put_stock_speed_h * 4, 0.1), 1), 
+        round(st.session_state.db_data['putaway_non_stock']/max(total_put_non_speed_h * 4, 0.1), 1), 
         round(time_pick_stock, 1), round(time_pack, 1),
         "Automatisk", "Klar 14:30", "Löpande"
     ]
 }
 st.table(prognos_data)
+
 
 
 # =====================================================================
