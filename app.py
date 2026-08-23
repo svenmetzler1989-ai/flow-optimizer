@@ -288,11 +288,12 @@ if live_sim and st.session_state.sim_minutes < 1410:
 
         rörlig_personal_pool.append(emp)
 
-        # ⚖️ REGLERINGSMOTORN (MODERAT PARERING VID 1000 ORDER & GARANTERAT PLOCKSLUT 21:30)
+    # ⚖️ REGLERINGSMOTORN (VOLYMSTYRD AUTOMATION - INGA HÅRDA TIDSSPÄRRAR)
     total_kärna = len(rörlig_personal_pool)
     if total_kärna > 0 and m < 1365:
-        if m >= 1290 or st.session_state.db_data["queue_pick_stock"] == 0:
-            # KLÖCKAN ÄR EFTER 21:30 (Plock är helt klart! Tryck in MAX 11 personer på Packning)
+        # Spärren borttagen! Vi kollar NU ENBART om plockkön är helt tom (0 rader kvar)
+        if st.session_state.db_data["queue_pick_stock"] == 0:
+            # När plocket är helt tomt: Flytta max kapacitet (11 pers) till packning, resten till städning
             mål_packare = min(11, total_kärna)
             for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
                 if rörlig_idx < mål_packare:
@@ -300,16 +301,16 @@ if live_sim and st.session_state.sim_minutes < 1410:
                 else:
                     st.session_state.placering[emp_id] = "Städning"
         else:
-            # 🛠️ MODERAT STYRNING: Flytta personal till pack vid >1000 order, men inte överdrivet mycket!
+            # Normaldrift baserad på volym i packkön (personalen plockar tills det är tomt!)
             if st.session_state.db_data["queue_pack"] > 2500:
-                mål_packare = min(11, int(total_kärna * 0.65)) # Högt tryck
+                mål_packare = min(11, int(total_kärna * 0.65)) 
             elif st.session_state.db_data["queue_pack"] > 1000:
-                # ⚖️ När orderna överstiger 1000: Flytta ca 3-4 personer till packborden (Moderat och stabilt)
+                # När orderna överstiger 1000: Flytta ca 3-4 personer till packborden
                 mål_packare = min(11, max(3, int(total_kärna * 0.35)))
             elif st.session_state.db_data["queue_pack"] < 300:
-                mål_packare = max(1, int(total_kärna * 0.15)) # Lågt tryck, fokusera på PLOCK
+                mål_packare = max(1, int(total_kärna * 0.15)) # Fokusera på PLOCK
             else:
-                mål_packare = min(11, max(2, int(total_kärna * 0.25))) # Normalläge
+                mål_packare = min(11, max(2, int(total_kärna * 0.25))) 
 
             for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
                 if rörlig_idx < mål_packare:
@@ -536,15 +537,15 @@ with col_sh4:
 
 
 # =====================================================================
-# 15. EKONOMISKT UTFALL (OPTIMERAD VINST FÖR 10 000 RADER)
+# 15. EKONOMISKT UTFALL (OPTIMAL VINSTTÄCKNING - INGA FÖRLUSTER)
 # =====================================================================
 st.markdown("---")
 st.subheader("💰 Skiftets Ekonomiska Utfall (Real-Time P&L)")
 
 PRIS_IN_STOCK = 75.00     
 PRIS_IN_NON = 85.00       
-PRIS_OUT_ORDER = 1.95     # ⚡ Justerad från 1.45 till 1.95 kr för att säkra vinst vid 10k rader
-PRIS_PACK_BOX = 4.80      
+PRIS_OUT_ORDER = 2.35     # ⚡ Justerad från 1.95 till 2.35 kr för att garantera vinst
+PRIS_PACK_BOX = 5.20      # ⚡ Justerad från 4.80 till 5.20 kr per paket
 PRIS_INVENTERING_RAD = 15.00 
 
 LON_OPERATOR = 289.0     
@@ -553,10 +554,9 @@ LON_LEADER = 355.0
 effektiva_timmar = min(16.75, max(0.1, (st.session_state.sim_minutes - 360) / 60.0))
 kostnad_personal = int((14 * LON_OPERATOR * effektiva_timmar) + (1 * LON_LEADER * effektiva_timmar))
 
-# Räknar intäkter baserat på den nya maxvolymen (10 000)
 intakt_in_stock = (6 - st.session_state.db_data["inbound_stock"]) * PRIS_IN_STOCK
 intakt_in_non = (3 - st.session_state.db_data["inbound_non_stock"]) * PRIS_IN_NON
-intakt_plock = (10000 - st.session_state.db_data["queue_pick_stock"]) * PRIS_OUT_ORDER # ⚡ Synkad till 10k
+intakt_plock = (10000 - st.session_state.db_data["queue_pick_stock"]) * PRIS_OUT_ORDER
 intakt_pack = max(0, st.session_state.total_packat_historik * PRIS_PACK_BOX)
 intakt_inventering = st.session_state.inventering_rader_klara * PRIS_INVENTERING_RAD
 
@@ -582,6 +582,7 @@ st.info(
 if live_sim:
     time.sleep(5)
     st.rerun()
+
 
 
 
