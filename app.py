@@ -477,12 +477,12 @@ with col_diag2:
 
 
 # =====================================================================
-# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET (110 PAKET/H SNITT)
+# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET (UPPDATERAD TEXT TILL 100 RADER/H)
 # =====================================================================
 total_sort_speed = p_sort * 150  
 
 time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(total_pick_stock_speed_h, 0.1)
-time_pack = st.session_state.db_data['queue_pack'] / max((p_pack * 110.0), 0.1) # Återställt till 110/h
+time_pack = st.session_state.db_data['queue_pack'] / max((p_pack * 110.0), 0.1)
 
 st.markdown("---")
 st.markdown("### 📊 Detaljerad tidsprognos för skiftet")
@@ -490,7 +490,7 @@ prognos_data = {
     "Processflöde": [
         "Inbound: Stock (35 min/pall)", "Inbound: Non-Stock (35 min/pall)", 
         "Inlagring: Putaway Stock (4 kart/h)", "Inlagring: Putaway Non-Stock (4 kart/h)", 
-        "Plock: Stock (90 rader/h snitt)", "Packning (110 paket/h snitt)", # ⚡ Packning återställt
+        "Plock: Stock (100 rader/h snitt)", f"Packning (110 paket/h snitt)", # ⚡ ÄNDRAT FRÅN 90 TILL 100 HÄR
         "Sortering & Pallning", "Utlastning & Transport", "Returer",
         "Inventering (Kvalitetssäkring)", "Städning (5S Miljödrift)"
     ],
@@ -498,7 +498,7 @@ prognos_data = {
     "Total Gruppkapacitet / timme": [
         f"{round(total_in_stock_speed_h, 1)} pallar", f"{round(total_in_non_speed_h, 1)} pallar", 
         f"{total_put_stock_speed_h * 4} kartonger", f"{total_put_non_speed_h * 4} kartonger", 
-        f"{total_pick_stock_speed_h} rader", f"{p_pack * 110} paket", # ⚡ Visar 110/h
+        f"{total_pick_stock_speed_h} rader", f"{p_pack * 110} paket", 
         f"{total_sort_speed} paket", f"{p_utlastning * 4} pallar", "Löpande (Max 1.5h)",
         f"{p_inventering * 30} rader", "Löpande"
     ],
@@ -534,15 +534,15 @@ with col_sh4:
 
 
 # =====================================================================
-# 15. EKONOMISKT UTFALL (OPTIMAL VINSTTÄCKNING)
+# 15. EKONOMISKT UTFALL (OPTIMERAD VINST FÖR 10 000 RADER)
 # =====================================================================
 st.markdown("---")
 st.subheader("💰 Skiftets Ekonomiska Utfall (Real-Time P&L)")
 
 PRIS_IN_STOCK = 75.00     
 PRIS_IN_NON = 85.00       
-PRIS_OUT_ORDER = 1.45     # Justerad för att garantera positiv marginal vid 100 rader/h
-PRIS_PACK_BOX = 4.80      # Justerad för att säkra vinsttäckning
+PRIS_OUT_ORDER = 1.95     # ⚡ Justerad från 1.45 till 1.95 kr för att säkra vinst vid 10k rader
+PRIS_PACK_BOX = 4.80      
 PRIS_INVENTERING_RAD = 15.00 
 
 LON_OPERATOR = 289.0     
@@ -551,9 +551,10 @@ LON_LEADER = 355.0
 effektiva_timmar = min(16.75, max(0.1, (st.session_state.sim_minutes - 360) / 60.0))
 kostnad_personal = int((14 * LON_OPERATOR * effektiva_timmar) + (1 * LON_LEADER * effektiva_timmar))
 
+# Räknar intäkter baserat på den nya maxvolymen (10 000)
 intakt_in_stock = (6 - st.session_state.db_data["inbound_stock"]) * PRIS_IN_STOCK
 intakt_in_non = (3 - st.session_state.db_data["inbound_non_stock"]) * PRIS_IN_NON
-intakt_plock = (12500 - st.session_state.db_data["queue_pick_stock"]) * PRIS_OUT_ORDER
+intakt_plock = (10000 - st.session_state.db_data["queue_pick_stock"]) * PRIS_OUT_ORDER # ⚡ Synkad till 10k
 intakt_pack = max(0, st.session_state.total_packat_historik * PRIS_PACK_BOX)
 intakt_inventering = st.session_state.inventering_rader_klara * PRIS_INVENTERING_RAD
 
@@ -579,6 +580,7 @@ st.info(
 if live_sim:
     time.sleep(5)
     st.rerun()
+
 
 
 
