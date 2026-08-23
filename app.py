@@ -38,9 +38,9 @@ START_INBOUND_STOCK = 6
 START_INBOUND_NON = 1         
 START_PUTAWAY_STOCK = 120     
 START_PUTAWAY_NON = 40        
-START_PICK_STOCK = 12500      # Något höjd för att räcka till det förlängda kvällsskiftet
-START_PICK_NON = 750          
-START_PACK = 450              
+START_PICK_STOCK = 10000      # Något höjd för att räcka till det förlängda kvällsskiftet
+START_PICK_NON = 450          
+START_PACK = 0              
 
 if "total_packat_historik" not in st.session_state:
     st.session_state.total_packat_historik = 0
