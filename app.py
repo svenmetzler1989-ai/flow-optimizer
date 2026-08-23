@@ -346,13 +346,27 @@ if live_sim and st.session_state.sim_minutes < 1410:
     st.session_state.db_data["putaway_stock"] = max(0, st.session_state.db_data["putaway_stock"] - inlagrat_stock)
     st.session_state.db_data["putaway_non_stock"] = max(0, st.session_state.db_data["putaway_non_stock"] - inlagrat_non)
 
-    # Inkommande gods under dagen
+    # --- INKOMMANDE GODS UNDER DAGEN (HUNDRA PROCENT SÄKRAD MOT ATTRIBUTEERROR) ---
     if m <= 1100 and random.random() > 0.93:
         st.session_state.db_data["inbound_stock"] += random.randint(1, 2)
     
-    if m in [540, 900] and st.session_state.totalt_inkommande_non < 3:
+    # 📥 SKOTTSÄKER LOGIK: Hämta värdet säkert. Finns det inte i minnet sätter vi det till 1 direkt utan krasch!
+    nuvarande_inkommande_non = st.session_state.get("totalt_inkommande_non", 1)
+
+    # Släpp på de 2 extra Non-Stock-pallarna vid exakt kl. 09:00 (minut 540) och kl. 15:00 (minut 900)
+    if m in [540, 900] and nuvarande_inkommande_non < 3:
         st.session_state.db_data["inbound_non_stock"] += 1
-        st.session_state.totalt_inkommande_non += 1
+        st.session_state.totalt_inkommande_non = nuvarande_inkommande_non + 1
+        
+    # Processa inleveranser med de dedikerade personerna
+    if p_in_stock > 0 and st.session_state.db_data["inbound_stock"] > 0:
+        st.session_state.db_data["inbound_stock"] = max(0, st.session_state.db_data["inbound_stock"] - 1)
+        st.session_state.db_data["putaway_stock"] += random.randint(14, 24)
+
+    if p_in_non > 0 and st.session_state.db_data["inbound_non_stock"] > 0:
+        st.session_state.db_data["inbound_non_stock"] = max(0, st.session_state.db_data["inbound_non_stock"] - 1)
+        st.session_state.db_data["putaway_non_stock"] += random.randint(10, 15)
+
 
 
 # =====================================================================
