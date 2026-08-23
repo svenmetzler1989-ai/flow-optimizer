@@ -58,23 +58,23 @@ def fetch_live_data():
 
 
 # =====================================================================
-# 3. MEDARBETARDATABAS (Låst till 15 personer & Verkligt Plocktempo på 50)
+# 3. MEDARBETARDATABAS (⚡ JUSTERAT PLOCKTEMPO TILL 100 RADER/H)
 # =====================================================================
 if 'medarbetare_info' not in st.session_state:
     medarbetare_info = {
-        "EMP-101": {"namn": "Anna", "pick_speed": 52, "pack_speed": 95, "putaway_speed": 85, "start_zon": "Plock Stock"},
-        "EMP-102": {"namn": "Per", "pick_speed": 48, "pack_speed": 125, "putaway_speed": 75, "start_zon": "Packning"},
-        "EMP-103": {"namn": "Lars", "pick_speed": 50, "pack_speed": 110, "putaway_speed": 95, "start_zon": "Putaway Stock"},
-        "EMP-104": {"namn": "Elin", "pick_speed": 51, "pack_speed": 100, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
-        "EMP-105": {"namn": "Mikael", "pick_speed": 49, "pack_speed": 105, "putaway_speed": 70, "start_zon": "Inbound Stock"},
+        "EMP-101": {"namn": "Anna", "pick_speed": 102, "pack_speed": 95, "putaway_speed": 85, "start_zon": "Plock Stock"},
+        "EMP-102": {"namn": "Per", "pick_speed": 98, "pack_speed": 125, "putaway_speed": 75, "start_zon": "Packning"},
+        "EMP-103": {"namn": "Lars", "pick_speed": 100, "pack_speed": 110, "putaway_speed": 95, "start_zon": "Putaway Stock"},
+        "EMP-104": {"namn": "Elin", "pick_speed": 101, "pack_speed": 100, "putaway_speed": 80, "start_zon": "Plock Non-Stock"},
+        "EMP-105": {"namn": "Mikael", "pick_speed": 99, "pack_speed": 105, "putaway_speed": 70, "start_zon": "Inbound Stock"},
     }
-    # Skapa resterande 10 medarbetare med ett verkligt plocktempo runt 50 order/h
+    # Skapa resterande 10 medarbetare med ett kontrollerat plocktempo runt 100 rader/h
     start_zoner_pool = ["Plock Stock", "Packning", "Plock Stock", "Putaway Stock", "Plock Non-Stock"]
     for i in range(106, 116):
         emp_id = f"EMP-{i}"
         medarbetare_info[emp_id] = {
             "namn": f"Medarbetare {i}",
-            "pick_speed": random.randint(47, 53),
+            "pick_speed": random.randint(97, 103), # Justerat till ca 100 rader i timmen
             "pack_speed": random.randint(100, 115),
             "putaway_speed": random.randint(75, 85),
             "start_zon": random.choice(start_zoner_pool)
@@ -409,7 +409,7 @@ with col_diag2:
 
 
 # =====================================================================
-# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET (KORRIGERADE VARIABELNAMN)
+# 11. DETALJERAD TIDSPROGNOS FÖR SKIFTET (JUSTERAD TEXT TILL 100/H)
 # =====================================================================
 p_sort = list(st.session_state.placering.values()).count("Sortering")
 p_utlastning = list(st.session_state.placering.values()).count("Utlastning")
@@ -418,7 +418,6 @@ p_retur = list(st.session_state.placering.values()).count("Returer")
 
 total_sort_speed = p_sort * 150  
 
-# 🛠️ BUGGFIX: Ändrat till de nya variabelnamnen med _h från Punkt 5
 time_pick_stock = st.session_state.db_data['queue_pick_stock'] / max(total_pick_stock_speed_h, 0.1)
 time_pack = st.session_state.db_data['queue_pack'] / max(total_pack_speed_h, 0.1)
 
@@ -428,7 +427,7 @@ prognos_data = {
     "Processflöde": [
         "Inbound: Stock (35 min/pall)", "Inbound: Non-Stock (35 min/pall)", 
         "Inlagring: Putaway Stock (4 kart/h block)", "Inlagring: Putaway Non-Stock (4 kart/h block)", 
-        "Plock: Stock (50 rader/h snitt)", "Packning (110 paket/h snitt)",
+        "Plock: Stock (100 rader/h snitt)", "Packning (110 paket/h snitt)", # ⚡ Uppdaterad text
         "Sortering & Pallning", "Utlastning & Transport", "Returer"
     ],
     "Aktuell Bemanning (Antal)": [p_in_stock, p_in_non, p_put_stock, p_put_non, p_pick_stock, p_pack, p_sort, (p_utlastning + p_transport), p_retur],
@@ -448,7 +447,6 @@ prognos_data = {
     ]
 }
 st.table(prognos_data)
-
 
 
 # =====================================================================
