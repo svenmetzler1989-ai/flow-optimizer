@@ -315,24 +315,24 @@ if live_sim and st.session_state.sim_minutes < 1410:
                 else:
                     st.session_state.placering[emp_id] = "Plock Stock"
 
-    # --- BERÄKNA PRODUKTION LIVE UTIFRÅN TEMPO ---
+    # --- BERÄKNA PRODUKTION LIVE UTIFRÅN TEMPO (⚡ LÅST TILL FULL KAPACITET) ---
     if ar_det_rast:
         plockat_stock = plockat_non = packat = inlagrat_stock = inlagrat_non = inventerat_rader = 0
     else:
-        # ⚡ BALANSERAD HASTIGHETSKOEFFICIENT: Säkrar målgång kl 21:30 och vänder P&L till vinst
-        hastighets_boost = 1.25 
+        # ⚡ SÄKRAD KAPACITET: Sätts till exakt 1.00 för att köra på medarbetarnas fulla grundtempo (100 rader/h snitt)
+        hastighets_boost = 1.00 
             
         plockat_stock = int(min(step_pick_stock * hastighets_boost, st.session_state.db_data["queue_pick_stock"]))
         plockat_non = int(min(step_pick_non, st.session_state.db_data["queue_pick_non_stock"]))
         
-        # 🛠️ ÅTERSTÄLLT: Packtakt tillbaka på 110 paket/timme per person för lönsamhetens skull
+        # Säkrad packning på 110 paket/timme
         step_pack_110 = (p_pack * 110.0) / 6.0
         packat = int(min(step_pack_110 * hastighets_boost, st.session_state.db_data["queue_pack"] + plockat_stock + plockat_non))
         
         inlagrat_stock = int(min(step_put_stock * 4, st.session_state.db_data["putaway_stock"]))
         inlagrat_non = int(min(step_put_non * 4, st.session_state.db_data["putaway_non_stock"]))
         inventerat_rader = p_inventering * 5 
-
+ 
     # Verkställ produktionen i köerna
     st.session_state.db_data["queue_pick_stock"] = max(0, st.session_state.db_data["queue_pick_stock"] - plockat_stock)
     st.session_state.db_data["queue_pick_non_stock"] = max(0, st.session_state.db_data["queue_pick_non_stock"] - plockat_non)
