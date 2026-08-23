@@ -286,10 +286,11 @@ if live_sim and st.session_state.sim_minutes < 1410:
 
         rörlig_personal_pool.append(emp)
 
-    # ⚖️ REGLERINGSMOTORN (Styr basen 50/50, hanterar plockstopp 21:30 & max 11 packare)
+        # ⚖️ REGLERINGSMOTORN (TRÖGRÖRLIG FLÖDESPARERING - REAGERAR BARA VID STOR VOLYM)
     total_kärna = len(rörlig_personal_pool)
     if total_kärna > 0 and m < 1365:
         if m >= 1290 or st.session_state.db_data["queue_pick_stock"] == 0:
+            # Efter 21:30 eller när plocket är helt tomt: Fyll packborden till max (11 st)
             mål_packare = min(11, total_kärna)
             for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
                 if rörlig_idx < mål_packare:
@@ -297,18 +298,26 @@ if live_sim and st.session_state.sim_minutes < 1410:
                 else:
                     st.session_state.placering[emp_id] = "Städning"
         else:
-            if st.session_state.db_data["queue_pack"] > 250:
-                mål_packare = min(11, int(total_kärna * 0.70))
-            elif st.session_state.db_data["queue_pack"] < 50:
-                mål_packare = max(1, int(total_kärna * 0.20))
+            # 🛠️ JUSTERADE TRÖSKELVÄRDEN: Reagera bara när det är RIKTIGT mycket order vid packborden
+            if st.session_state.db_data["queue_pack"] > 3000:
+                # Akut läge: Maxa alla tillgängliga packbord (Max 11 st)
+                mål_packare = min(11, int(total_kärna * 0.80))
+            elif st.session_state.db_data["queue_pack"] > 1500:
+                # Hög volym: Skicka ca 5-6 personer till packborden
+                mål_packare = min(11, int(total_kärna * 0.45))
+            elif st.session_state.db_data["queue_pack"] < 300:
+                # Låg volym (t.ex. runt 200 order): Håll packningen minimal (1-2 pers), fokusera på PLOCK!
+                mål_packare = max(1, int(total_kärna * 0.15))
             else:
-                mål_packare = min(11, int(total_kärna / 2))
+                # Normalläge (mellan 300 och 1500 order): Håll en stabil och lugn bas
+                mål_packare = min(11, max(2, int(total_kärna * 0.25)))
 
             for rörlig_idx, emp_id in enumerate(rörlig_personal_pool):
                 if rörlig_idx < mål_packare:
                     st.session_state.placering[emp_id] = "Packning"
                 else:
                     st.session_state.placering[emp_id] = "Plock Stock"
+
 
     # --- BERÄKNA PRODUKTION LIVE UTIFRÅN TEMPO ---
     if ar_det_rast:
@@ -528,16 +537,16 @@ with col_sh4:
 
 
 # =====================================================================
-# 15. EKONOMISKT UTFALL (REALISTISKA OCH BALANSERADE TARIFER)
+# 15. EKONOMISKT UTFALL (OPTIMAL KOMMERSIELL BALANS & REELL VINST)
 # =====================================================================
 st.markdown("---")
 st.subheader("💰 Skiftets Ekonomiska Utfall (Real-Time P&L)")
 
-# ⚡ EKONOMISK JUSTERING: Tarifferna har sänkts kraftigt för att ge en rimlig vinstnivå
-PRIS_IN_STOCK = 35.00     
-PRIS_IN_NON = 45.00       
-PRIS_OUT_ORDER = 0.45     # Sänkt från 5.80 till 0.45 kr per rad
-PRIS_PACK_BOX = 1.20      # Sänkt från 6.50 till 1.20 kr per paket
+# ⚡ FINJUSTERADE TARIFER FÖR ATT GE EN REALISTISK VINST UTAN ENORM FÖRLUST
+PRIS_IN_STOCK = 75.00     
+PRIS_IN_NON = 85.00       
+PRIS_OUT_ORDER = 1.15     # Justerad till 1.15 kr per rad för sund vinsttäckning
+PRIS_PACK_BOX = 3.20      # Justerad till 3.20 kr per paket
 PRIS_INVENTERING_RAD = 15.00 
 
 LON_OPERATOR = 325.0     
@@ -574,6 +583,7 @@ st.info(
 if live_sim:
     time.sleep(5)
     st.rerun()
+
 
 
 
